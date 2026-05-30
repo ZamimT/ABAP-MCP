@@ -2,6 +2,99 @@
 
 ---
 
+## 2026-05-30 — RAP vollständig: `create_behavior_definition` (BDEF, direkter ADT-HTTP)
+
+### Feature: BDEF-Anlage ohne Library-Support
+
+**Hintergrund:** `abap-adt-api` v7.1.3 und v8.4.0 haben keinen BDEF-Support (`NonGroupTypeIds`
+enthält `BDEF/BF` nicht). Direkter `POST /sap/bc/adt/bo/behaviors` mit XML-Body nach dem
+`createBodySimple`-Muster aus `objectcreator.js` — Namespace und Typ aus den SAP-ADT-Konventionen
+abgeleitet.
+
+**Neues Tool:** `create_behavior_definition`
+- ADT-Endpunkt: `POST /sap/bc/adt/bo/behaviors`
+- XML-Namespace: `xmlns:bdef="http://www.sap.com/adt/bo/behaviors"`
+- Typ: `BDEF/BF`
+- Legt den BDEF-Objekt-Shell an; BDL-Quelle danach per `write_abap_source` füllen
+- `rap-bdef`-Skill für vollständige BDL-Syntax verfügbar
+- Via `SAPWrite(operation="create_bdef")` — immer erreichbar ohne `find_tools`
+
+**Geänderte Dateien:**
+- `src/schemas.ts` — `S_CreateBehaviorDefinition`
+- `src/adt-endpoints.ts` — `ADT_BO_BEHAVIORS`
+- `src/tools/handlers/create.ts` — `handleCreateBehaviorDefinition` + `encXml` Helper
+- `src/tools/tool-definitions.ts` — Tool-Metadaten + SAPWrite-Beschreibung
+- `src/tools/handler-map.ts`, `tool-registry.ts`, `handlers/intent.ts` — Registrierung
+
+---
+
+## 2026-05-30 — Core-Tools reduziert: 18 → 12 (Intent-Facade deckt granulare Tools ab)
+
+### Optimierung: Kleinerer initialer Tool-Footprint
+
+**Hintergrund:** Die vier INTENT-Verben (`SAPRead`, `SAPWrite`, `SAPSearch`, `SAPDiagnose`) delegieren
+intern an dieselben Handler wie die granularen Tools. Beide gleichzeitig im Core zu haben war redundant
+und kostete unnötig Tokens bei jedem Session-Start.
+
+**Änderung:** Folgende 6 granulare Tools aus `CORE_TOOL_NAMES` entfernt — sie sind weiterhin über
+`find_tools` aktivierbar und werden durch die INTENT-Facade vollständig abgedeckt:
+
+- `search_abap_objects` → `SAPSearch`
+- `search_source_code` → `SAPSearch`
+- `read_abap_source` → `SAPRead`
+- `get_object_info` → `SAPRead`
+- `where_used` → `SAPRead` / `SAPSearch`
+- `write_abap_source` → `SAPWrite`
+
+**Ergebnis:** 12 Core-Tools statt 18 — weniger initiale Token-Last ohne Funktionsverlust.
+
+**Geänderte Dateien:** `src/tools/tool-registry.ts`, `CLAUDE.md`, `readme.md`, `DOCUMENTATION.md`, `Updates.md`
+
+---
+
+## 2026-05-30 — RAP Stack: 5 neue Tools für CDS Metadata Extensions, Service Definitions, Service Bindings, DCL
+
+### Feature: OData/RAP-Entwicklung vollständig abdecken
+
+**Hintergrund:** Vergleich mit dem offiziellen SAP ADT for VS Code MCP-Server (Q2 2026 GA) zeigte
+eine Lücke: Das SAP-Angebot deckt den vollständigen RAP-Entwicklungsstack ab (CDS-Annotation,
+OData-Exposition, Zugriffskontrolle). Diese fünf Tools schließen die Lücke.
+
+**Neue Tools (alle in CREATE-Kategorie):**
+
+- **`create_cds_metadata_extension`** (`DDLX/EX`) — CDS-View mit UI-Annotationen versehen
+  (Fiori-Feldlabels, SelectionFields, LineItem, HeaderInfo). Nach der Erstellung die Annotation
+  mit `write_abap_source` schreiben.
+
+- **`create_service_definition`** (`SRVD/SRV`) — OData-Service-Definition anlegen, die CDS-Entities
+  exponiert. Quelle (EXPOSE ENTITY …) per `write_abap_source` füllen, dann mit
+  `create_service_binding` binden.
+
+- **`create_service_binding`** (`SRVB/SVB`) — OData-Service-Binding anlegen und an eine Service
+  Definition koppeln. Parameter `bindingType`: `V2_UI` (Fiori/SAPUI5) oder `V2_WEB_API`
+  (externe API). Anschließend mit `publish_service_binding` veröffentlichen.
+
+- **`publish_service_binding`** — Binding veröffentlichen (macht den OData-Endpunkt erreichbar).
+  Ruft `client.publishServiceBinding(name, version)` auf und liefert den Severity-Status zurück.
+
+- **`create_data_control_language`** (`DCLS/DL`) — DCL-Quelle für instanzbasierte
+  Zugriffsberechtigungen auf CDS-Views anlegen (`DEFINE ROLE …`). Quelle per
+  `write_abap_source` füllen.
+
+**Intent-Facade aktualisiert:** `SAPWrite` kennt jetzt die Operationen `create_metadata_extension`,
+`create_service_definition`, `create_service_binding`, `publish_service_binding`, `create_dcl`.
+
+**Geänderte Dateien:**
+- `src/schemas.ts` — 5 neue Zod-Schemata
+- `src/adt-endpoints.ts` — 4 neue Endpunkt-Konstanten
+- `src/tools/handlers/create.ts` — 5 neue Handler-Funktionen
+- `src/tools/tool-definitions.ts` — 5 neue Tool-Definitionen + SAPWrite-Beschreibung
+- `src/tools/handler-map.ts` — Dispatch-Einträge ergänzt
+- `src/tools/tool-registry.ts` — CREATE-Kategorie + Kurzbeschreibungen ergänzt
+- `src/tools/handlers/intent.ts` — WRITE_OPS ergänzt
+
+---
+
 ## 2026-05-30 — Gap-Closing: Method-Surgery, Contracts, Cache, Intent-Facade, Governance, Analyse
 
 ### Feature: 9 neue Tools + Kontextkompression + Audit/Rollen

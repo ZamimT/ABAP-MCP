@@ -15,7 +15,10 @@ export const TOOL_CATEGORIES: Record<string, string[]> = {
   WRITE:       ["write_abap_source", "edit_abap_method", "activate_abap_object", "mass_activate", "pretty_print"],
   CREATE:      ["create_abap_program", "create_abap_class", "create_abap_interface",
                 "create_function_group", "create_cds_view", "create_database_table",
-                "create_message_class"],
+                "create_message_class", "create_cds_metadata_extension",
+                "create_service_definition", "create_service_binding",
+                "publish_service_binding", "create_data_control_language",
+                "create_behavior_definition"],
   DELETE:      ["delete_abap_object"],
   TEST:        ["run_unit_tests", "create_test_include"],
   QUALITY:     ["run_syntax_check", "run_atc_check", "validate_ddic_references", "review_clean_abap"],
@@ -33,18 +36,12 @@ export const TOOL_CATEGORIES: Record<string, string[]> = {
 export const CORE_TOOL_NAMES = new Set([
   "find_tools",
   "list_tools",
-  "search_abap_objects",
-  "search_source_code",       // full-text search across ABAP source — fundamental search capability
-  "read_abap_source",
-  "write_abap_source",
-  "get_object_info",
-  "where_used",
   "analyze_abap_context",
   "search_abap_syntax",       // mandatory in abap_develop Step 5.1
   "validate_ddic_references", // mandatory in abap_develop Step 5.3
-  "batch_read",              // performance: always available for parallel reads
-  "search_sap_web",          // web search for SAP Help, Community & Notes — used in abap_develop Steps 2 & 5
-  "get_abap_contract",       // context compression — cheap API-surface reads of dependencies
+  "batch_read",               // performance: always available for parallel reads
+  "search_sap_web",           // web search for SAP Help, Community & Notes — used in abap_develop Steps 2 & 5
+  "get_abap_contract",        // context compression — cheap API-surface reads of dependencies
   // Intent facade: consolidated verbs always available so clients can use a
   // small tool surface instead of discovering 50 granular tools.
   "SAPRead",
@@ -59,8 +56,9 @@ export const FIND_TOOLS_ENTRY = {
   name: "find_tools",
   description: "Finds and enables ABAP tools by search term or category. " +
     "⚠️ Most tools are deferred — call this BEFORE using any non-core tool! " +
-    "Categories: SEARCH, READ, WRITE, CREATE, DELETE, TEST, " +
-    "QUALITY (syntax check, ATC, Clean ABAP review, DDIC validation), " +
+    "Categories: SEARCH, READ, WRITE, CREATE (programs, classes, interfaces, function groups, CDS views, tables, " +
+    "message classes, CDS metadata extensions, service definitions, service bindings, data control language), " +
+    "DELETE, TEST, QUALITY (syntax check, ATC, Clean ABAP review, DDIC validation), " +
     "DIAGNOSTICS (short dumps, traces), TRANSPORT, ABAPGIT, QUERY, " +
     "DOCUMENTATION (ABAP syntax help), WEBSEARCH (Google SAP web search), BATCH (parallel read operations), " +
     "ANALYSIS (call graph, dead-code detection), INTENT (consolidated SAPRead/SAPWrite/SAPSearch/SAPDiagnose verbs). " +
@@ -104,7 +102,13 @@ export const TOOL_SHORT_DESCRIPTIONS: Record<string, string> = {
   create_function_group: "Create new function group",
   create_cds_view:       "Create new CDS view (DDLS)",
   create_database_table: "Create new transparent table (TABL)",
-  create_message_class:  "Create new message class (MSAG)",
+  create_message_class:             "Create new message class (MSAG)",
+  create_cds_metadata_extension:    "Create new CDS Metadata Extension (DDLX) for UI annotations",
+  create_service_definition:        "Create new OData Service Definition (SRVD)",
+  create_service_binding:           "Create new OData Service Binding (SRVB) → V2_UI or V2_WEB_API",
+  publish_service_binding:          "Publish a Service Binding to activate the OData endpoint",
+  create_data_control_language:     "Create new CDS Data Control Language source (DCLS) for access control",
+  create_behavior_definition:       "Create new RAP Behavior Definition (BDEF) — direct ADT HTTP, BDL via write_abap_source",
   delete_abap_object:    "Permanently delete an object (⛔ irreversible)",
   run_unit_tests:        "Run ABAP Unit Tests, return results",
   create_test_include:   "Create test include (CCAU) for a class",

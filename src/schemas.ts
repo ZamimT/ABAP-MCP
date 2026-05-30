@@ -117,6 +117,42 @@ export const S_CreateMessageClass = z.object({
   devClass:    z.string().describe("Package"),
   transport:   z.string().optional(),
 });
+export const S_CreateCdsMetadataExtension = z.object({
+  name:        z.string().min(1).max(30).describe("Metadata extension name, must start with Z or Y"),
+  description: z.string().max(40).describe("Short description"),
+  devClass:    z.string().describe("Package"),
+  transport:   z.string().optional(),
+});
+export const S_CreateServiceDefinition = z.object({
+  name:        z.string().min(1).max(30).describe("Service definition name, must start with Z or Y"),
+  description: z.string().max(40).describe("Short description"),
+  devClass:    z.string().describe("Package"),
+  transport:   z.string().optional(),
+});
+export const S_CreateServiceBinding = z.object({
+  name:              z.string().min(1).max(26).describe("Service binding name, must start with Z or Y"),
+  description:       z.string().max(40).describe("Short description"),
+  devClass:          z.string().describe("Package"),
+  transport:         z.string().optional(),
+  serviceDefinition: z.string().describe("Name of the SRVD service definition to bind, e.g. ZSD_ORDERS_SRV_D"),
+  bindingType:       z.enum(["V2_WEB_API", "V2_UI"]).default("V2_UI").describe("V2_UI = Fiori / SAPUI5 app; V2_WEB_API = external API consumer"),
+});
+export const S_PublishServiceBinding = z.object({
+  name:    z.string().describe("Service binding name, e.g. ZSD_ORDERS_SRV_B"),
+  version: z.string().default("0001").optional().describe("Content version, typically '0001'"),
+});
+export const S_CreateDataControlLanguage = z.object({
+  name:        z.string().min(1).max(30).describe("DCL source name, must start with Z or Y"),
+  description: z.string().max(40).describe("Short description"),
+  devClass:    z.string().describe("Package"),
+  transport:   z.string().optional(),
+});
+export const S_CreateBehaviorDefinition = z.object({
+  name:        z.string().min(1).max(30).describe("BDEF name — must match the root CDS entity name exactly; must start with Z or Y"),
+  description: z.string().max(40).describe("Short description"),
+  devClass:    z.string().describe("Package"),
+  transport:   z.string().optional(),
+});
 
 // --- DELETE ---
 export const S_DeleteObject = z.object({

@@ -1,6 +1,6 @@
 # ABAP MCP Server
 
-Standalone MCP Server für agentives ABAP-Development — 59 Tools via ADT REST API.
+Standalone MCP Server für agentives ABAP-Development — 65 Tools via ADT REST API.
 
 ---
 
@@ -86,12 +86,57 @@ Wenn alles klappt, siehst du:
   User    : <USERNAME>  Client: <CLIENT>  Lang: EN
   Write   : ❌ deaktiviert
   Delete  : ❌ deaktiviert
-  Tools   : 18 initial (59 gesamt, deferred)
+  Tools   : 12 initial (65 gesamt, deferred)
   Doku    : help.sap.com vlatest
   Prompts : 1 (abap_develop)
   ADT     : ✅ Verbunden
 ✅ MCP Server läuft auf stdio — bereit für Verbindungen
 ```
+
+---
+
+## Vergleich: Dieser MCP vs. SAP ADT for VS Code (offizielles MCP)
+
+SAP hat mit dem ADT for VS Code MCP-Server (Q2 2026 GA) ein ähnliches Konzept geliefert —
+ein MCP-Server über die ADT REST API. Der Vergleich zeigt, wo die Unterschiede liegen:
+
+| Feature | Dieser MCP | SAP ADT for VS Code |
+|---|---|---|
+| **Tool-Anzahl** | **65 Tools** | ~10 Capability-Kategorien |
+| **IDE-Bindung** | Keine — jeder MCP-Client | VS Code only |
+| **Systemunterstützung** | ECC 6.0+, S/4HANA on-prem, BTP | BTP-optimiert; on-prem sekundär |
+| **Klassisches ABAP** (Programme, FuGr, BAPIs, Nachrichten) | ✅ Vollständig | ❌ Nicht geplant |
+| **CDS Views (DDLS)** | ✅ | ✅ |
+| **CDS Metadata Extensions (DDLX)** | ✅ | ✅ |
+| **Service Definitions (SRVD)** | ✅ | ✅ |
+| **Service Bindings (SRVB) + Publish** | ✅ | ✅ |
+| **Data Control Language (DCLS)** | ✅ | ✅ |
+| **Behavior Definitions (BDEF)** | ✅ `create_behavior_definition` | ✅ |
+| **Behavior Implementations (ABP)** | ✅ via Klassen-Tools | ✅ |
+| **Method-Level Surgery** | ✅ `read/edit_abap_method` | ❌ |
+| **Context Compression (Contracts)** | ✅ `get_abap_contract` | ❌ |
+| **Call Graph / Dead-Code-Erkennung** | ✅ | ❌ |
+| **Parallele Batch-Reads** | ✅ `batch_read` | ❌ |
+| **ABAP-Snippet-Ausführung** | ✅ ephemer + Cleanup | ❌ |
+| **Deferred Tool Loading** | ✅ 75–80 % Token-Ersparnis | N/A |
+| **Audit-Logging** | ✅ Strukturiertes JSON | ❌ |
+| **RBAC-Governance** | ✅ viewer/developer/admin | ❌ |
+| **Paket-Guards + Namespace-Zwang** | ✅ | ❌ |
+| **SAProuter / BTP Proxy / HTTP Proxy** | ✅ Alle 4 Routing-Modi | BTP + direkt |
+| **Web-Suche** | ✅ `search_sap_web` (Tavily) | ❌ |
+| **Clean ABAP Lint** | ✅ `review_clean_abap` + Skill | ✅ ATC clean-core |
+| **Unit Tests** | ✅ Ausführen + Include erstellen | ✅ Generieren + Ausführen |
+| **DDIC-Feldvalidierung (Pre-Write)** | ✅ Statische Analyse vor Write | ❌ |
+| **RAP BDEF-Wissen** | ✅ `rap-bdef`-Skill | ✅ SAP-eigenes Modell |
+| **Spezialisiertes ABAP-LLM** | ❌ (nutzt Client-Modell) | ✅ SAP-ABAP-1 |
+| **Native VS Code UX** | ❌ (bewusst IDE-agnostisch) | ✅ |
+| **Enterprise SLA** | ❌ Open Source | ✅ |
+| **Lizenzkosten** | **Kostenlos** | AI Units (BTP-Subscription) |
+
+**Fazit:** SAP hat ein schmaleres initiales Angebot (BTP-fokussiert, VS Code-only, ~10 Kategorien)
+mit einem proprietären ABAP-Modell. Dieser Server ist breiter (alle SAP-Systeme, alle ABAP-Artefakte,
+jeder MCP-Client), tiefer (65 Tools, Governance, Audit, Kontextkompression) und kostenlos.
+Die einzige echte Lücke ist das spezialisierte SAP-ABAP-1 Sprachmodell.
 
 ---
 

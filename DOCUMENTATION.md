@@ -47,7 +47,7 @@ Zugriff auf ein SAP ABAP-System über die ADT REST API — ohne VS Code als Brü
 | SEARCH | 2 | Objektsuche mit Wildcards, Quellcode-Volltextsuche |
 | READ | 13 | Quellcode, **einzelne Methode** (`read_abap_method`), **Contract** (`get_abap_contract`), Metadaten, Where-Used, Code Completion, Definitionen, Revisionen, DDIC, Tabellenfelder, Tabelleninhalte, Fix-Vorschläge, Kontext-Analyse |
 | WRITE | 5 | Quellcode schreiben, **einzelne Methode ersetzen** (`edit_abap_method`), aktivieren, Massen-Aktivierung, formatieren |
-| CREATE | 7 | Programme, Klassen, Interfaces, FuGr, CDS, Tabellen, Messages |
+| CREATE | 13 | Programme, Klassen, Interfaces, FuGr, CDS, Tabellen, Messages, CDS Metadata Extensions, Service Definitions, Service Bindings, DCL, Behavior Definitions |
 | DELETE | 1 | Objekte löschen |
 | TEST | 2 | Unit Tests ausführen, Test-Includes erstellen |
 | QUALITY | 4 | Syntaxcheck, ATC-Prüfungen, DDIC-Feldvalidierung, Clean ABAP Code-Review |
@@ -63,9 +63,11 @@ Zugriff auf ein SAP ABAP-System über die ADT REST API — ohne VS Code als Brü
 | META | 2 | Tool-Finder und Tool-Übersicht für dynamische Tool-Registrierung |
 | PROMPTS | 1 | `abap_develop` — Intelligenter ABAP-Entwicklungsworkflow |
 
-> **Token-Optimierung:** Mit `DEFER_TOOLS=true` (Default) werden initial nur 18 Kern-Tools geladen.
+> **Token-Optimierung:** Mit `DEFER_TOOLS=true` (Default) werden initial nur 12 Kern-Tools geladen.
 > Weitere Tools werden on-demand über `find_tools` aktiviert — das spart ~75-80% Tokens pro `tools/list`-Aufruf.
-> Für eine besonders kleine Tool-Oberfläche delegieren die vier **INTENT**-Verben an die granularen Tools.
+> Die vier **INTENT**-Verben (`SAPRead`/`SAPWrite`/`SAPSearch`/`SAPDiagnose`) sind immer im Core und decken
+> die häufigsten granularen Tools ab (`read_abap_source`, `write_abap_source`, `search_abap_objects` usw.) —
+> diese granularen Tools sind deferred und werden bei Bedarf über `find_tools` aktiviert.
 
 ---
 
@@ -234,7 +236,7 @@ MAX_DUMPS=50
 
 #### `find_tools`
 
-Findet und aktiviert ABAP-Tools nach Suchbegriff oder Kategorie. Wird nur im Deferred-Modus (`DEFER_TOOLS=true`) benötigt — dann werden initial nur 18 Kern-Tools geladen und weitere Tools on-demand über dieses Meta-Tool aktiviert.
+Findet und aktiviert ABAP-Tools nach Suchbegriff oder Kategorie. Wird nur im Deferred-Modus (`DEFER_TOOLS=true`) benötigt — dann werden initial nur 12 Kern-Tools geladen und weitere Tools on-demand über dieses Meta-Tool aktiviert.
 
 **Parameter:**
 
@@ -701,6 +703,128 @@ Legt eine neue transparente Tabelle (TABL) an. Name muss mit `Z` oder `Y` beginn
 #### `create_message_class`
 
 Legt eine neue Nachrichtenklasse (MSAG) an. Name muss mit `Z` oder `Y` beginnen.
+
+---
+
+#### `create_cds_metadata_extension`
+
+Legt eine neue CDS-Metadata-Extension (DDLX) an. Wird verwendet, um eine CDS-View mit
+UI-Annotationen zu versehen (z.B. `@UI.lineItem`, `@UI.selectionField`, `@UI.headerInfo`).
+Name muss mit `Z` oder `Y` beginnen. Nach der Anlage die Quelle (`@Metadata.extension ...`)
+mit `write_abap_source` füllen.
+
+**Parameter:**
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `name` | string | ✅ | Extension-Name (max. 30 Zeichen, Z/Y-Prefix) |
+| `description` | string | ✅ | Kurzbeschreibung (max. 40 Zeichen) |
+| `devClass` | string | ✅ | Paket, z.B. `ZLOCAL` oder `$TMP` |
+| `transport` | string | | Transportauftrag |
+
+---
+
+#### `create_service_definition`
+
+Legt eine neue OData-Service-Definition (SRVD) an, die CDS-Entities als OData-Service
+exponiert. Name muss mit `Z` oder `Y` beginnen. Nach der Anlage die Quelle
+(`EXPOSE ENTITY … AS …`) mit `write_abap_source` füllen, dann mit `create_service_binding` binden.
+
+**Parameter:**
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `name` | string | ✅ | Service-Definition-Name (max. 30 Zeichen, Z/Y-Prefix) |
+| `description` | string | ✅ | Kurzbeschreibung (max. 40 Zeichen) |
+| `devClass` | string | ✅ | Paket |
+| `transport` | string | | Transportauftrag |
+
+---
+
+#### `create_service_binding`
+
+Legt ein neues OData-Service-Binding (SRVB) an und verknüpft es mit einer Service-Definition.
+Nach der Anlage mit `publish_service_binding` veröffentlichen.
+
+**Parameter:**
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `name` | string | ✅ | Binding-Name (max. 26 Zeichen, Z/Y-Prefix) |
+| `description` | string | ✅ | Kurzbeschreibung (max. 40 Zeichen) |
+| `devClass` | string | ✅ | Paket |
+| `transport` | string | | Transportauftrag |
+| `serviceDefinition` | string | ✅ | Name der SRVD-Service-Definition, z.B. `ZSD_ORDERS_SRV_D` |
+| `bindingType` | string | | `V2_UI` (Fiori/SAPUI5, Default) oder `V2_WEB_API` (externe API) |
+
+---
+
+#### `publish_service_binding`
+
+Veröffentlicht (aktiviert) ein OData-Service-Binding und macht den OData-Endpunkt erreichbar.
+Muss nach `create_service_binding` aufgerufen werden.
+
+**Parameter:**
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `name` | string | ✅ | Service-Binding-Name, z.B. `ZSD_ORDERS_SRV_B` |
+| `version` | string | | Content-Version, typischerweise `0001` (Default: `0001`) |
+
+---
+
+#### `create_data_control_language`
+
+Legt eine neue CDS-Data-Control-Language-Quelle (DCLS) an für instanzbasierte
+Zugriffsberechtigungen auf CDS-Views (`DEFINE ROLE …`). Name muss mit `Z` oder `Y` beginnen.
+Quelle mit `write_abap_source` füllen.
+
+**Parameter:**
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `name` | string | ✅ | DCL-Source-Name (max. 30 Zeichen, Z/Y-Prefix) |
+| `description` | string | ✅ | Kurzbeschreibung (max. 40 Zeichen) |
+| `devClass` | string | ✅ | Paket |
+| `transport` | string | | Transportauftrag |
+
+---
+
+#### `create_behavior_definition`
+
+Legt eine neue RAP Behavior Definition (BDEF) an. Der Name muss **exakt** dem Root-CDS-Entity-Namen
+entsprechen, auf den sich die BDEF bezieht. Name muss mit `Z` oder `Y` beginnen.
+
+Nach der Anlage die BDL-Quelle mit `write_abap_source` schreiben — erster Ausdruck muss
+`managed;`, `unmanaged;`, `projection;`, `abstract;` oder `interface;` sein. Für vollständige
+BDL-Syntax steht der **`rap-bdef`**-Skill bereit.
+
+> ⚠️ **Implementierungshinweis:** `abap-adt-api` unterstützt BDEF nicht — dieser Handler
+> verwendet einen direkten `POST /sap/bc/adt/bo/behaviors`. Das ADT-Endpoint und der
+> XML-Namespace folgen den SAP-Konventionen und wurden aus den Pattern der Library abgeleitet;
+> bei Fehlern liefert SAP eine eindeutige Fehlermeldung mit dem korrekten Wert.
+
+**Parameter:**
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `name` | string | ✅ | BDEF-Name = Root-CDS-Entity-Name (max. 30 Zeichen, Z/Y-Prefix) |
+| `description` | string | ✅ | Kurzbeschreibung (max. 40 Zeichen) |
+| `devClass` | string | ✅ | Paket |
+| `transport` | string | | Transportauftrag |
+
+**Typischer RAP-Entwicklungsablauf:**
+
+```
+1. create_cds_view          → Root Entity (ZI_MY_ENTITY)
+2. create_cds_view          → Projection View (ZC_MY_ENTITY)
+3. create_behavior_definition → BDEF (ZI_MY_ENTITY) — gleicher Name wie Root Entity
+4. write_abap_source        → BDL-Quelle (managed; strict(2); ...)
+5. create_cds_metadata_extension → UI-Annotationen
+6. create_service_definition → SRVD
+7. create_service_binding   → SRVB
+8. publish_service_binding  → OData-Endpoint aktivieren
+```
 
 ---
 
@@ -1612,7 +1736,7 @@ alle Safety-Guards/Audit bleiben aktiv. **Kern-Tools.**
 | Tool | `operation`-Werte |
 |------|-------------------|
 | `SAPRead` | source, method, contract, info, where_used, table, table_fields, ddic, revisions, context |
-| `SAPWrite` | source, method, activate, pretty_print, create_program, create_class, create_interface, create_function_group, create_cds_view, create_table, create_message_class, delete |
+| `SAPWrite` | source, method, activate, pretty_print, create_program, create_class, create_interface, create_function_group, create_cds_view, create_table, create_message_class, create_metadata_extension, create_service_definition, create_service_binding, publish_service_binding, create_dcl, create_bdef, delete |
 | `SAPSearch` | objects, source, call_graph, dead_code |
 | `SAPDiagnose` | syntax, atc, unit, ddic_validate, clean_abap, dumps, dump_detail, traces, trace_detail |
 

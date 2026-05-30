@@ -41,6 +41,12 @@ const WRITE_OPS: Record<string, string> = {
   create_cds_view: "create_cds_view",
   create_table: "create_database_table",
   create_message_class: "create_message_class",
+  create_metadata_extension: "create_cds_metadata_extension",
+  create_service_definition: "create_service_definition",
+  create_service_binding: "create_service_binding",
+  publish_service_binding: "publish_service_binding",
+  create_dcl: "create_data_control_language",
+  create_bdef: "create_behavior_definition",
   delete: "delete_abap_object",
 };
 const SEARCH_OPS: Record<string, string> = {

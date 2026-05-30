@@ -60,6 +60,27 @@ export const ADT_DDIC_DDL_SOURCES = "/sap/bc/adt/ddic/ddl/sources";
  * Used by: create_database_table */
 export const ADT_DDIC_TABLES = "/sap/bc/adt/ddic/tables";
 
+/** CDS Metadata Extension (DDLX) base path
+ * Used by: create_cds_metadata_extension */
+export const ADT_DDIC_DDLX_SOURCES = "/sap/bc/adt/ddic/ddlx/sources";
+
+/** Service Definition (SRVD) base path
+ * Used by: create_service_definition */
+export const ADT_DDIC_SRVD_SOURCES = "/sap/bc/adt/ddic/srvd/sources";
+
+/** Service Binding (SRVB) base path
+ * Used by: create_service_binding, publish_service_binding */
+export const ADT_BUSINESSSERVICES_BINDINGS = "/sap/bc/adt/businessservices/bindings";
+
+/** Data Control Language (DCLS) base path
+ * Used by: create_data_control_language */
+export const ADT_ACM_DCL_SOURCES = "/sap/bc/adt/acm/dcl/sources";
+
+/** Behavior Definition (BDEF) base path
+ * Used by: create_behavior_definition
+ * Note: abap-adt-api has no BDEF support — this handler uses a direct httpClient POST. */
+export const ADT_BO_BEHAVIORS = "/sap/bc/adt/bo/behaviors";
+
 // ── Packages ────────────────────────────────────────────────────────
 
 /** Package path (parent for object creation)
