@@ -40,12 +40,12 @@
 Der ABAP MCP Server ermöglicht KI-Assistenten (Claude, GitHub Copilot, Cursor usw.) direkten
 Zugriff auf ein SAP ABAP-System über die ADT REST API — ohne VS Code als Brücke.
 
-**48 Tools** in 13 Gruppen + 2 Meta-Tools + 1 MCP Prompt decken den kompletten ABAP-Entwicklungsworkflow ab:
+**50 Tools** in 14 Gruppen + 2 Meta-Tools + 1 MCP Prompt decken den kompletten ABAP-Entwicklungsworkflow ab:
 
 | Gruppe | Anzahl Tools | Beschreibung |
 |--------|-------------|--------------|
 | SEARCH | 2 | Objektsuche mit Wildcards, Quellcode-Volltextsuche |
-| READ | 10 | Quellcode, Metadaten, Where-Used, Code Completion, Definitionen, Revisionen, DDIC, Tabellen, Fix-Vorschläge, Kontext-Analyse |
+| READ | 11 | Quellcode, Metadaten, Where-Used, Code Completion, Definitionen, Revisionen, DDIC, Tabellenfelder, Tabelleninhalte, Fix-Vorschläge, Kontext-Analyse |
 | WRITE | 4 | Quellcode schreiben, aktivieren, Massen-Aktivierung, formatieren |
 | CREATE | 7 | Programme, Klassen, Interfaces, FuGr, CDS, Tabellen, Messages |
 | DELETE | 1 | Objekte löschen |
@@ -56,6 +56,7 @@ Zugriff auf ein SAP ABAP-System über die ADT REST API — ohne VS Code als Brü
 | ABAPGIT | 2 | Repos auflisten, Pull ausführen |
 | QUERY | 3 | SELECT-Statements, inaktive Objekte, ABAP-Snippets ausführen |
 | DOCUMENTATION | 5 | ABAP-Keyword-Doku, Klassen-Doku, Modul-Best-Practices, Clean ABAP, ABAP-Syntax |
+| WEBSEARCH | 1 | Websuche in SAP Help, Community & Notes |
 | BATCH | 1 | Parallele Ausführung mehrerer Read-Only-Tools in einem MCP-Call |
 | META | 2 | Tool-Finder und Tool-Übersicht für dynamische Tool-Registrierung |
 | PROMPTS | 1 | `abap_develop` — Intelligenter ABAP-Entwicklungsworkflow |
@@ -1292,6 +1293,37 @@ Ein MCP Prompt der einen strukturierten 6-Schritte-Workflow für ABAP-Entwicklun
 **Verwendung in MCP-Clients:**
 
 Der Prompt wird über die MCP Prompt-API aufgerufen. In Claude Desktop oder anderen MCP-Clients kann er direkt als Prompt ausgewählt werden. Er generiert eine User-Message mit dem vollständigen Workflow-Template, das die KI Schritt für Schritt abarbeitet.
+
+---
+
+## Claude Skills
+
+### `clean-abap` — Clean-ABAP-Styleguide als Skill
+
+Eine projektgebundene [Claude Code Skill](https://docs.claude.com/en/docs/claude-code), die den Clean-ABAP-Styleguide automatisch heranzieht, sobald ABAP-Code geschrieben, reviewt oder refaktoriert wird. Im Gegensatz zum `abap_develop` MCP-Prompt (der explizit aufgerufen wird) greift die Skill automatisch anhand ihrer `description`.
+
+**Speicherort:** `.claude/skills/clean-abap/SKILL.md` (in den Repo eingecheckt)
+
+**Funktionsweise (Progressive Disclosure):**
+- Claude lädt zunächst nur die `description` der Skill.
+- Passt der Kontext (ABAP schreiben/reviewen/refaktorieren), wird die `SKILL.md` geladen — eine kompakte Zusammenfassung mit Golden Rules und den wirkungsvollsten/häufigsten Regeln inline.
+- Erst bei Bedarf liest Claude den vollständigen `clean-abap/CleanABAP.md` (~5150 Zeilen) bzw. die Sub-Sections — die `SKILL.md` enthält dafür eine Navigations-Tabelle mit Zeilennummern. So bleibt der Token-Verbrauch gering.
+
+**Inhalt der `SKILL.md`:**
+
+| Block | Inhalt |
+|-------|--------|
+| Golden Rules | Team rules, Optimize for reading, Consistency, Boy-scout rule, OO/funktional |
+| Highest-impact rules | Names, Methods, Language/Data, Booleans/Conditions/Ifs, Tables, Error Handling, Comments/Formatting, Constants, Classes, Testing — je mit Zeilenverweis |
+| Reference map | 18 Sektionen von `CleanABAP.md` → Zeilennummern |
+| Sub-sections | Verweise auf `clean-abap/sub-sections/` (Exceptions, Enumerations, InterfacesVsAbstractClasses, …) |
+| Verifikation | code pal for ABAP, ATC/Code Inspector, abaplint + Projekt-Tools (Quality-Handler, `review_clean_abap`) |
+
+**Konflikt-Präzedenz:** Bei Widersprüchen gilt (1) Konvention des bearbeiteten Objekts → (2) Projektkonventionen (CLAUDE.md / Memory) → (3) Clean-ABAP-Defaults. Beispiel: Vollzeilenkommentare mit `*` in Spalte 1 (Projektvorgabe) haben Vorrang vor der Clean-ABAP-Empfehlung `"`.
+
+**Aktivierung:** Project Skills werden beim Session-Start geladen. Nach dem Anlegen Claude Code neu starten, dann greift die Skill automatisch.
+
+**Hinweis:** Die Skill referenziert die Dateien unter `clean-abap/` über repo-root-relative Pfade. Sessions müssen vom Repo-Root laufen; wird der Ordner `clean-abap/` verschoben, müssen die Pfade in der `SKILL.md` angepasst werden.
 
 ---
 

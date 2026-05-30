@@ -1,6 +1,31 @@
-# ABAP MCP Server v2
+# ABAP MCP Server
 
 Standalone MCP Server für agentives ABAP-Development — 50+ Tools via ADT REST API.
+
+---
+
+## Top-Features — was diesen MCP unterscheidet
+
+Die ABAP-MCP-Landschaft reicht von reinen Read-only-ADT-Wrappern bis zu großen Tool-Sammlungen. Dieser Server verfolgt einen anderen Schwerpunkt: nicht *möglichst viele* Tools, sondern **qualitativ hochwertige, agentengetriebene Entwicklung gegen real erreichbare Systeme**. Die folgenden drei Punkte gibt es in dieser Kombination bei keinem anderen ABAP-MCP-Server:
+
+### 🧹 Clean ABAP als erzwungener Workflow — nicht als Linter-Nachgedanke
+Andere Server bieten bestenfalls einen optionalen Lint-Aufruf. Hier ist Clean Code in den Entwicklungsprozess **eingebaut**: Der `abap_develop`-Prompt erzwingt einen **6-Schritte-Workflow** (Kontextanalyse → Referenzrecherche → Clean-ABAP-Check → Code-Platzierung → Implementierung → Qualitätsprüfung). Zusätzlich liegt eine Claude-Code-Skill `clean-abap` bei, die den [Clean-ABAP-Styleguide](https://github.com/SAP/styleguides) automatisch anwendet, sobald Code geschrieben oder reviewt wird, plus `review_clean_abap` und `search_clean_abap` als Werkzeuge. Ergebnis: Der Agent produziert styleguide-konformen Code — ohne dass du ihn ständig daran erinnern musst.
+
+### 🔍 DDIC-Validierung VOR dem Coding — gegen Halluzination an der Wurzel
+Mit `validate_ddic_references` prüft der Agent Tabellen-, Struktur- und Feldnamen **gegen das echte Data Dictionary, bevor** er sie im Code verwendet. Das eliminiert die häufigste Halluzinationsquelle bei ABAP-Generierung — erfundene Feldnamen, die sonst erst bei der Aktivierung auffliegen. Andere Server prüfen Code erst *nachträglich* per Syntaxcheck oder ATC; hier wird die Fehlerquelle *vorab* abgeschnitten.
+
+### 🌐 Vier Netzwerk-Routing-Modi — erreicht Systeme, die andere nicht erreichen
+Die meisten ADT-Bridges sprechen nur direktes HTTPS. Dieser Server probiert vier Modi in fester Reihenfolge und nimmt den ersten konfigurierten: **BTP Connectivity Proxy → SAProuter-NI-Tunnel → HTTP-CONNECT-Proxy → direktes HTTPS**. Damit erreichst du das ABAP-System auch in klassischen B2B-VPNs (nur Port 3299 offen) und in hybriden CAP-/Cloud-Connector-Szenarien — Konstellationen, an denen reine HTTPS-Wrapper scheitern.
+
+### Weitere starke Merkmale
+
+- **🔁 Rekursives Coding bis zur erfolgreichen Aktivierung** — Der Write-Workflow läuft `lock → write → Syntaxcheck → aktivieren → unlock` und **aktiviert nur bei sauberem Syntaxcheck**. Schlägt etwas fehl, bekommt der Agent die konkrete Fehlerliste zurück und korrigiert iterativ weiter, bis das Objekt fehlerfrei aktiviert ist. Du erhältst aktivierten, lauffähigen Code statt eines Entwurfs mit roten Markern.
+- **🎯 Deferred Tools — ~75–80 % Token-Ersparnis** — Statt alle 50 Tools in jeden Kontext zu laden, startet der Server mit nur **13 Core-Tools**. Der Rest wird bei Bedarf über das Meta-Tool `find_tools` aktiviert (`find_tools(category=…)` oder `find_tools(query=…)`).
+- **🧠 Voller Kontext vor dem Schreiben** — `analyze_abap_context`, `where_used` und `read_abap_source(includeRelated=true)` lesen rekursiv alle verbundenen Objekte (Includes, Funktionsbausteine, Klassen), damit der Agent das gesamte Programm versteht, bevor er es anfasst.
+- **⚡ Sichere Ad-hoc-Ausführung** — `execute_abap_snippet` führt Code in einem temporären `$TMP`-Programm aus und **löscht es immer** (auch bei Laufzeitfehlern). Eine statische Verbotsliste (`COMMIT WORK`, DB-`INSERT/UPDATE/DELETE`, …) blockiert datenverändernde Operationen vorab.
+- **🛡️ Default-sichere Safety-Guards** — Schreiben, Löschen und Ausführen sind standardmäßig **deaktiviert** und müssen explizit freigeschaltet werden. Kundennamensraum-Zwang (Z/Y) und `BLOCKED_PACKAGES` schützen SAP-eigene Objekte. PROD bleibt komplett gesperrt.
+- **🔒 Concurrency-Safe** — Serieller Write-Lock und Stateful-Sessions mit automatischer Lock-Recovery verhindern Konflikte bei parallelen Schreiboperationen.
+- **📚 Integrierte SAP-Doku-Suche** — `search_sap_web` und versionsabhängige help.sap.com-Verweise (`SAP_ABAP_VERSION`) liefern dem Agenten aktuelle, korrekte Referenzen statt veraltetem Trainingswissen.
 
 ---
 
@@ -83,6 +108,10 @@ Im Projektordner `.claude/mcp.json`:
   }
 }
 ```
+
+#### Clean ABAP Skill (optional, Claude Code)
+
+Das Repo enthält eine Claude-Code-Skill `clean-abap` (`.claude/skills/clean-abap/SKILL.md`), die den Clean-ABAP-Styleguide automatisch anwendet, sobald ABAP-Code geschrieben oder reviewt wird. Sie ist bereits eingecheckt — nach dem Klonen Claude Code im Projektordner neu starten, dann greift sie automatisch. Details siehe `DOCUMENTATION.md` → Abschnitt „Claude Skills“.
 
 ### Cline (VS Code Extension)
 

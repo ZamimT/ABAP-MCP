@@ -15,11 +15,21 @@ const SAP_ROUTE_PATTERN = /\/H\/[^/]+\/S\/\d+/i;
  * ------------------------------------------------------------------ */
 
 const str = (name: string, fallback = ""): string => (process.env[name] ?? fallback).trim();
-const bool = (name: string, fallback = false): boolean => {
-  const raw = process.env[name];
+
+/**
+ * Parse a boolean from a raw env value. Accepts `true` / `1` / `yes` / `on`
+ * (any case, surrounding whitespace ignored); everything else is `false`.
+ * An unset or empty value falls back to `fallback`. Exported (and pure) so it
+ * can be unit-tested without importing the side-effecting `cfg` below.
+ */
+export const parseBoolean = (raw: string | undefined, fallback = false): boolean => {
   if (raw === undefined) return fallback;
-  return raw === "true";
+  const v = raw.trim().toLowerCase();
+  if (v === "") return fallback;
+  return v === "true" || v === "1" || v === "yes" || v === "on";
 };
+
+const bool = (name: string, fallback = false): boolean => parseBoolean(process.env[name], fallback);
 const list = (name: string, fallback: string): string[] =>
   str(name, fallback)
     .split(",")

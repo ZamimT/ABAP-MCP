@@ -10,7 +10,7 @@ import { S_GetAbapKeywordDoc, S_GetAbapClassDoc, S_GetModuleBestPractices, S_Sea
 import { cfg } from "../../config.js";
 import { buildKeywordUrl, buildClassUrl } from "../../adt-endpoints.js";
 import { fetchSapDocumentation } from "../../helpers/documentation.js";
-import { CLEAN_ABAP_LOCAL_DIR, loadCleanAbapFiles, parseMarkdownSections } from "../../helpers/clean-abap.js";
+import { CLEAN_ABAP_LOCAL_DIR, loadCleanAbapFiles, parseMarkdownSections, isNavigationSection } from "../../helpers/clean-abap.js";
 import { MODULE_BEST_PRACTICES } from "../../data/module-best-practices.js";
 
 function ok(text: string): ToolResult { return { content: [{ type: "text", text }] }; }
@@ -70,6 +70,7 @@ export async function handleSearchCleanAbap(_client: ADTClient, args: Record<str
 
   const terms = p.query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
   const scored = allSections
+    .filter(s => !isNavigationSection(s.heading))
     .map(s => {
       const haystack = (s.heading + "\n" + s.content).toLowerCase();
       const score = terms.reduce((acc, t) => acc + (haystack.split(t).length - 1), 0);

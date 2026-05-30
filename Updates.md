@@ -2,6 +2,96 @@
 
 ---
 
+## 2026-05-30 — Wartung: Tests, Security-Fixes, Robustheit
+
+### Verbesserung: Unit-Tests, Dependency-Sicherheit & Härtung
+
+**Hintergrund:** Eine Projektdurchsicht ergab mehrere Verbesserungspunkte: keinerlei
+automatisierte Tests, 12 npm-Schwachstellen (4 hoch, u.a. `axios`/`fast-xml-parser`),
+inkonsistente Tool-Zählungen in der Doku sowie zwei Robustheitslücken in der
+Eingabevalidierung.
+
+**Lösung:**
+- **Test-Infrastruktur (Vitest):** Neues `npm test` / `npm run test:watch`. Tests unter
+  `test/*.test.ts` decken die reinen Helfer ab — Clean-ABAP-Parsing
+  (`parseMarkdownSections`, `isNavigationSection`, `searchCleanAbapSections`,
+  `CLEAN_ABAP_RULES`), SAProuter-Routen-Parsing (`parseSapRouteString`), Safety-Guards
+  und das Config-Boolean-Parsing. **Keine** SAP-Verbindung nötig; `vitest.config.ts`
+  setzt Dummy-Env und einen `.js`→`.ts`-Resolver für die NodeNext-Imports. 36 Tests grün.
+- **Security:** `npm audit fix` → **0 Schwachstellen** (vorher 12). `abap-adt-api` zog
+  innerhalb von `^7.1.0` auf 7.1.3 (bereinigtes `fast-xml-parser`), `axios` auf 1.16.1.
+- **Robustheit:**
+  - `config.bool()` akzeptiert jetzt `true`/`1`/`yes`/`on` (case-insensitiv) statt nur
+    exakt `"true"`. Pure, exportierte `parseBoolean()` für Testbarkeit.
+  - `assertSelectOnly()` erlaubt nun auch `WITH`-CTEs und lehnt DML-Schlüsselwörter als
+    eigenständige Wörter ab (`\b…\b`, d.h. `delete_flag` u.ä. lösen nicht mehr fälschlich
+    aus). Kommentar stellt klar: Defense-in-Depth, nicht die primäre Barriere.
+- **Doku-Konsistenz:** Tool-Zählung überall auf **50 Tools / 14 Gruppen** korrigiert
+  (vorher 30+/47/48/13 verstreut). In `DOCUMENTATION.md` fehlte die Gruppe **WEBSEARCH**
+  in der Tabelle und READ war mit 10 statt 11 angegeben — beide ergänzt/korrigiert.
+- **Kommentare:** Deutsche Kommentare in `src/helpers/clean-abap.ts` auf Englisch
+  vereinheitlicht (Rest des Codebestands ist englisch).
+
+**Dateien:**
+- `vitest.config.ts` (neu), `test/clean-abap.test.ts`, `test/saprouter.test.ts`,
+  `test/safety.test.ts`, `test/config.test.ts` (neu)
+- `package.json` — `test`/`test:watch`-Scripts, `vitest` devDependency, Tool-Zahl in der Description
+- `package-lock.json` — Security-Updates (`npm audit fix`)
+- `src/config.ts` — `parseBoolean()` extrahiert & gehärtet
+- `src/safety.ts` — `assertSelectOnly()` gehärtet (WITH-CTE, Wortgrenzen, Kommentar)
+- `src/helpers/clean-abap.ts` — Kommentare auf Englisch
+- `DOCUMENTATION.md`, `CLAUDE.md` — Tool-Zählung korrigiert, Test-Workflow dokumentiert
+
+---
+
+## 2026-05-30 — Clean ABAP Suche: Regel-genaue Granularität
+
+### Verbesserung: `search_clean_abap` & `review_clean_abap` finden einzelne Regeln
+
+**Problem:** `parseMarkdownSections` zerlegte den Styleguide nur an `##`-Überschriften — also an den 18 Kategorien (Names, Methods, …). Eine einzelne Regel (115 × `###`, 92 × `####`) war damit kein eigener Suchtreffer. Bei der Ausgabe wurde der Abschnitt zudem auf die ersten ~80 Zeilen gekürzt. Folge: Eine tief in einer großen Kategorie (z.B. „Methods", ~1000 Zeilen) liegende Regel wie *„Prefer RETURNING to EXPORTING"* (Zeile 2512) wurde nie im Auszug gezeigt — die KI bekam nur den Kategorie-Anfang. Zusätzlich gewann das Inhaltsverzeichnis (`## Content`) fast jede Suche, weil es jeden Begriff als Link enthält.
+
+**Lösung:**
+- `parseMarkdownSections` splittet jetzt an `##`/`###`/`####` → **226 statt 18** durchsuchbare Abschnitte. Jede Regel ist ein eigener Treffer **inkl. ihrer Code-Beispiele**.
+- Headings tragen einen Breadcrumb-Pfad (z.B. `Methods › Parameter Types › Use either RETURNING or EXPORTING …`), damit Kategorie-Kontext für Scoring und Anzeige erhalten bleibt.
+- Neuer Helper `isNavigationSection()` filtert das Inhaltsverzeichnis (`Content`) und den Intro-Block aus den Suchergebnissen — gilt für `search_clean_abap` und die Guideline-Auszüge von `review_clean_abap`.
+
+**Wirkung (verifiziert gegen `clean-abap/CleanABAP.md`):** Suchen wie „RETURNING EXPORTING single output", „CASE instead of ELSE IF", „raise exception CX_STATIC_CHECK" liefern jetzt die exakte Regel mit Beispiel statt eines abgeschnittenen Kategorie-Intros.
+
+**Begleitend — verpflichtender Lookup:** Skill (`.claude/skills/clean-abap/SKILL.md`) und `.clinerules` wurden so verschärft, dass die KI pro Thema **zuerst** `search_clean_abap` (bzw. das Lesen der Zeilenbereiche) aufruft und erst dann codet — die Kurz-Zusammenfassung ist explizit nur eine Checkliste, kein Ersatz für den Volltext.
+
+**Dateien:**
+- `src/helpers/clean-abap.ts` — `parseMarkdownSections` (h2/h3/h4 + Breadcrumb), neuer `isNavigationSection()`, Filter in `searchCleanAbapSections`
+- `src/tools/handlers/documentation.ts` — Navigations-Filter in `handleSearchCleanAbap`
+- `.claude/skills/clean-abap/SKILL.md` — verpflichtender Lookup-Block
+- `.clinerules` — Step 3 auf verpflichtenden Per-Thema-Lookup verschärft
+
+> **Hinweis:** Änderung wirkt erst nach `npm run build`. (Aktuell schlägt der Build wegen fehlender Dependencies `http-proxy-agent`/`https-proxy-agent` fehl — vorher `npm install` ausführen.)
+
+---
+
+## 2026-05-30 — Clean ABAP Claude Skill
+
+### Neue Claude Skill: `clean-abap`
+
+**Hintergrund:** Das Repository enthält unter `clean-abap/` den vollständigen Clean-ABAP-Styleguide (`CleanABAP.md`, ~5150 Zeilen) inkl. Sub-Sections und Cheat-Sheets. Dieser Inhalt war bisher nur als Referenzdokument vorhanden — Claude Code zog ihn nicht automatisch heran, wenn ABAP-Code geschrieben oder reviewt wurde.
+
+**Lösung:** Eine projektgebundene Claude Skill `clean-abap`, die automatisch greift, sobald ABAP-Code erzeugt, reviewt oder refaktoriert wird. Die `SKILL.md` ist eine kompakte Arbeitszusammenfassung (Golden Rules + die wirkungsvollsten/häufigsten Regeln inline) und verweist per Progressive Disclosure mit Zeilennummern auf den vollständigen `clean-abap/CleanABAP.md` — kein 192-KB-Dump in den Kontext.
+
+**Technische Details:**
+- Speicherort: `.claude/skills/clean-abap/SKILL.md` (Project Skill, in den Repo eingecheckt)
+- Frontmatter `description` ist auf die Trigger-Fälle (ABAP schreiben/reviewen/refaktorieren) zugeschnitten
+- Referenziert die bestehenden Dateien unter `clean-abap/` an Ort und Stelle (keine Duplikation), inkl. Navigations-Tabelle (18 Sektionen → Zeilennummern) und Sub-Section-Verweisen
+- Explizite Konflikt-Präzedenz: (1) Konvention des bearbeiteten Objekts → (2) Projektkonventionen (CLAUDE.md / Memory) → (3) Clean-ABAP-Defaults. Dadurch werden projekteigene Vorgaben (z.B. `*` in Spalte 1 für Vollzeilenkommentare) respektiert
+- Ergänzt — ohne zu duplizieren — den bestehenden `abap_develop` MCP-Prompt (dessen Schritt 3 die Clean-ABAP-Prüfung ist) und die Quality-/Diagnostics-Tools
+- Aktivierung: Project Skills werden beim Session-Start geladen → Claude Code neu starten
+
+**Dateien:**
+- `.claude/skills/clean-abap/SKILL.md` — neue Skill-Definition
+- `DOCUMENTATION.md` — Abschnitt „Claude Skills“ ergänzt
+- `readme.md` — Hinweis auf die Skill ergänzt
+
+---
+
 ## 2026-03-25 — get_table_fields Tool
 
 ### Neues Tool: `get_table_fields`

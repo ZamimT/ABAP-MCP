@@ -90,18 +90,18 @@ const CLEAN_ABAP_URL = "https://raw.githubusercontent.com/SAP/styleguides/main/c
 
 let cleanAbapSectionCache: Map<string, string> | null = null;
 
-/** Lädt alle Clean ABAP Markdown-Dateien (lokal bevorzugt, GitHub als Fallback) */
+/** Loads all Clean ABAP markdown files (local preferred, GitHub as fallback). */
 export async function loadCleanAbapFiles(): Promise<Map<string, string>> {
   if (cleanAbapSectionCache) return cleanAbapSectionCache;
 
   const files = new Map<string, string>();
 
-  // Lokale Dateien verwenden wenn vorhanden
+  // Use local files when present
   if (fs.existsSync(CLEAN_ABAP_LOCAL_DIR)) {
     const readMd = (filePath: string, label: string) => {
       try {
         files.set(label, fs.readFileSync(filePath, "utf-8"));
-      } catch { /* ignorieren */ }
+      } catch { /* ignore */ }
     };
 
     readMd(path.join(CLEAN_ABAP_LOCAL_DIR, "CleanABAP.md"), "CleanABAP");
@@ -130,30 +130,56 @@ export async function loadCleanAbapFiles(): Promise<Map<string, string>> {
   return files;
 }
 
-/** Zerlegt einen Markdown-Text in Abschnitte anhand von ## Überschriften */
+/**
+ * Splits a markdown text into sections by ##/###/#### headings.
+ * Each individual Clean ABAP rule (h3/h4) becomes its own searchable section
+ * including its code examples — instead of a whole category (h2). The heading
+ * carries a breadcrumb path (e.g. "Methods › Calls › Prefer functional to
+ * procedural calls") so the category context is retained for scoring & display.
+ */
 export function parseMarkdownSections(md: string): Array<{ heading: string; content: string }> {
   const sections: Array<{ heading: string; content: string }> = [];
   const lines = md.split("\n");
   let currentHeading = "(Intro)";
   let currentLines: string[] = [];
+  let h2 = "";
+  let h3 = "";
+
+  const flush = () => {
+    if (currentLines.length > 0)
+      sections.push({ heading: currentHeading, content: currentLines.join("\n").trim() });
+  };
 
   for (const line of lines) {
-    const h2 = line.match(/^##\s+(.+)/);
-    if (h2) {
-      if (currentLines.length > 0)
-        sections.push({ heading: currentHeading, content: currentLines.join("\n").trim() });
-      currentHeading = h2[1].trim();
+    const m = line.match(/^(#{2,4})\s+(.+)/);
+    if (m) {
+      flush();
+      const level = m[1].length;
+      const text = m[2].trim();
+      if (level === 2) { h2 = text; h3 = ""; currentHeading = text; }
+      else if (level === 3) { h3 = text; currentHeading = [h2, text].filter(Boolean).join(" › "); }
+      else { currentHeading = [h2, h3, text].filter(Boolean).join(" › "); }
       currentLines = [];
     } else {
       currentLines.push(line);
     }
   }
-  if (currentLines.length > 0)
-    sections.push({ heading: currentHeading, content: currentLines.join("\n").trim() });
+  flush();
   return sections;
 }
 
-/** Sucht im Clean ABAP Guide nach dem relevantesten Abschnitt */
+/**
+ * Navigation / non-rule sections that would skew the search.
+ * "Content" is the table of contents (links to every rule) and therefore
+ * matches any search term; "(Intro)" is just the title/badges before the
+ * first heading.
+ */
+export function isNavigationSection(heading: string): boolean {
+  const h = heading.trim().toLowerCase();
+  return h === "content" || h === "(intro)";
+}
+
+/** Searches the Clean ABAP guide for the most relevant section(s). */
 export function searchCleanAbapSections(
   sections: Array<{ heading: string; content: string }>,
   query: string,
@@ -161,10 +187,11 @@ export function searchCleanAbapSections(
 ): Array<{ heading: string; excerpt: string; score: number }> {
   const terms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
   return sections
+    .filter(s => !isNavigationSection(s.heading))
     .map(s => {
       const haystack = (s.heading + "\n" + s.content).toLowerCase();
       const score = terms.reduce((acc, t) => acc + (haystack.split(t).length - 1), 0);
-      // Abschnitt auf max. ~100 Zeilen kürzen
+      // Trim the section to ~100 lines max
       const excerpt = s.content.split("\n").slice(0, 100).join("\n").trim();
       return { heading: s.heading, excerpt, score };
     })

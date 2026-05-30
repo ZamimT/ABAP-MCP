@@ -17,6 +17,17 @@ When developing ABAP code (writing, modifying, creating objects), ALWAYS follow 
 ### Step 3: Clean ABAP
 - Run `review_clean_abap(source=<existing_code>)` on existing code before changes
 - Apply modern ABAP: inline declarations, string templates, ABAP SQL, CX_* exceptions, OOP
+- The Clean ABAP styleguide has 226 rules with examples (`clean-abap/CleanABAP.md`).
+  Do NOT work from memory. For EACH topic your task touches (naming, methods, error
+  handling, tables, conditions, …), FIRST call `search_clean_abap(query=<specific topic>)`
+  to retrieve the exact rule + its before/after example, THEN apply it.
+  Use specific queries (e.g. "RETURNING EXPORTING single output"), not broad ones ("methods").
+- Baseline defaults (still look up the detail before applying): descriptive names (no
+  Hungarian prefixes like `lv_`/`lt_`/`gs_`), small single-purpose methods, `RETURNING`
+  over `EXPORTING` for single values, positive conditions, `CASE` over `ELSE IF` chains,
+  named constants instead of magic numbers, exceptions instead of return codes
+- Precedence on conflicts: (1) the edited object's existing convention →
+  (2) these project rules → (3) Clean ABAP defaults. Never half-convert an object.
 
 ### Step 4: DDIC validation (MANDATORY for DB tables)
 - For each table used: `get_object_info` to read exact field names
@@ -30,6 +41,9 @@ When developing ABAP code (writing, modifying, creating objects), ALWAYS follow 
 5. On persistent errors: `search_sap_web(query=<error_message>)` to find solutions
 
 ### Step 6: Quality
+- `review_clean_abap(source=<the_code_you_just_wrote>)` — run on the NEWLY written/edited
+  source, not only the pre-existing code. Fix every reported finding, then re-run until it
+  returns "No Clean ABAP anti-patterns detected" (or only findings you can justify).
 - `run_atc_check` — fix priority 1+2 findings
 
 ## Important Rules

@@ -21,6 +21,12 @@ npm run dev
 # Start built server
 npm start
 
+# Run unit tests (Vitest — no SAP connection required)
+npm test
+
+# Run unit tests in watch mode
+npm run test:watch
+
 # Clean build artifacts
 npm run clean
 ```
@@ -30,6 +36,9 @@ npm run clean
 - Node.js 20+
 - Target: ES2022
 - Output: ESM (`"type": "module"`) to `dist/`, module resolution: NodeNext
+- Tests: Vitest (`test/*.test.ts`) covering pure helpers (Clean ABAP parsing, SAProuter
+  route parsing, safety guards, config parsing). Tests do **not** hit a live SAP system;
+  `vitest.config.ts` injects dummy env + a `.js`→`.ts` resolver for the NodeNext imports.
 
 ## Architecture
 
@@ -100,7 +109,7 @@ lock(objectUrl)
 ### Token Optimization
 - `SAP_ABAP_VERSION=latest` (default): ABAP version for help.sap.com documentation URLs (e.g. `latest`, `758`, `754`)
 - `DEFER_TOOLS=true` (default): Lazy load tools on demand via `find_tools(category=...)` or `find_tools(query=...)`
-- `DEFER_TOOLS=false`: Load all 47 tools upfront (higher initial token cost)
+- `DEFER_TOOLS=false`: Load all 50 tools upfront (higher initial token cost)
 
 ## Key Patterns & Implementation Details
 
