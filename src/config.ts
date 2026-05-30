@@ -124,6 +124,17 @@ export const cfg = Object.freeze({
   sapAbapVersion: str("SAP_ABAP_VERSION", "latest"),
   tavilyApiKey: str("TAVILY_API_KEY"),
 
+  // ── Governance ────────────────────────────────────────────────
+  // Role layers on top of the ALLOW_* flags: it can only *further* restrict,
+  // never grant. Default "admin" preserves the legacy behaviour where the
+  // ALLOW_* flags are the sole gate (no surprise for existing single-user
+  // setups). Set SAP_ROLE=viewer/developer to tighten in shared deployments.
+  role: (() => {
+    const r = str("SAP_ROLE", "admin").toLowerCase();
+    return (["viewer", "developer", "admin"] as const).includes(r as never) ? r : "admin";
+  })() as "viewer" | "developer" | "admin",
+  auditLogFile: str("AUDIT_LOG_FILE"),
+
   // ── Network routing — exactly one of these will be active ─────
   proxyUrl,
   sapRouter: str("SAP_ROUTER"),

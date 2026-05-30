@@ -10,6 +10,7 @@ import { S_WriteSource, S_Activate, S_MassActivate, S_PrettyPrint } from "../../
 import { cfg } from "../../config.js";
 import { assertWriteEnabled } from "../../safety.js";
 import { writeWorkflow, formatActivationMessages } from "../../write-workflow.js";
+import { audit } from "../../audit.js";
 
 function ok(text: string): ToolResult { return { content: [{ type: "text", text }] }; }
 function err(text: string): ToolResult { return { content: [{ type: "text", text }], isError: true }; }
@@ -48,6 +49,7 @@ export async function handleWriteAbapSource(client: ADTClient, args: Record<stri
     reportProgress,
   );
   const body = r.log.join("\n") + (r.syntaxErrors ? "\n\nSyntax errors:\n" + r.syntaxErrors.join("\n") : "");
+  audit({ tool: "write_abap_source", action: "write", target: p.objectUrl, outcome: r.success ? "success" : "error" });
   if (r.success) {
     return ok(`✅ Successfully written and activated\n\n${body}`);
   }

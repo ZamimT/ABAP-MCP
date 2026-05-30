@@ -9,6 +9,7 @@ import type { ToolResult } from "../../types.js";
 import { S_ReadSource, S_ObjectInfo, S_WhereUsed, S_CodeCompletion, S_FindDefinition, S_GetRevisions, S_GetDdicElement, S_GetTableContents, S_GetTableFields, S_FixProposals, S_GetInactiveObjects } from "../../schemas.js";
 import { ADT_PROGRAM_INCLUDES } from "../../adt-endpoints.js";
 import { resolveMainProgram } from "../../helpers/resolve.js";
+import { getObjectSourceCached } from "../../cache.js";
 
 function ok(text: string): ToolResult { return { content: [{ type: "text", text }] }; }
 
@@ -16,8 +17,7 @@ export async function handleReadAbapSource(client: ADTClient, args: Record<strin
   const p = S_ReadSource.parse(args);
   const baseUrl = p.objectUrl.replace(/\/source\/main$/, "");
   const mainUrl = `${baseUrl}/source/main`;
-  const mainSrc = await client.getObjectSource(mainUrl);
-  const mainText = typeof mainSrc === "string" ? mainSrc : JSON.stringify(mainSrc);
+  const mainText = await getObjectSourceCached(client, mainUrl);
 
   if (!p.includeRelated) {
     return ok(mainText);

@@ -5,6 +5,7 @@ import {
   assertPackageAllowed,
   assertWriteEnabled,
   assertDeleteEnabled,
+  assertRoleAllows,
 } from "../src/safety.js";
 
 describe("assertSelectOnly", () => {
@@ -59,5 +60,13 @@ describe("write/delete guards (default env: both disabled)", () => {
 
   it("assertDeleteEnabled throws when ALLOW_DELETE is not set", () => {
     expect(() => assertDeleteEnabled()).toThrow(/ALLOW_DELETE=true/);
+  });
+});
+
+describe("assertRoleAllows (default role: admin)", () => {
+  it("permits all capabilities for the default admin role", () => {
+    expect(() => assertRoleAllows("write")).not.toThrow();
+    expect(() => assertRoleAllows("delete")).not.toThrow();
+    expect(() => assertRoleAllows("execute")).not.toThrow();
   });
 });

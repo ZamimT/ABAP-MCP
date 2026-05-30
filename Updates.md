@@ -2,6 +2,69 @@
 
 ---
 
+## 2026-05-30 — Gap-Closing: Method-Surgery, Contracts, Cache, Intent-Facade, Governance, Analyse
+
+### Feature: 9 neue Tools + Kontextkompression + Audit/Rollen
+
+**Hintergrund:** Ein Vergleich mit sechs anderen ABAP-MCP-Servern (vibing-steampunk,
+ARC-1, mario-andreschak ×2, abap-ai, fr0ster) zeigte Lücken bei (a) Token-Effizienz
+(Method-Surgery, Kontextkompression, konsolidierte Tools), (b) Caching und (c)
+Multi-User-Governance. Diese sechs Phasen schließen sie.
+
+**Phase 1 — Method-Level Surgery (`read_abap_method`, `edit_abap_method`):**
+Lesen/Schreiben eines einzelnen `METHOD…ENDMETHOD`-Blocks statt der ganzen Klasse.
+`edit_abap_method` nimmt nur den neuen Methodenrumpf, splittet ihn server-seitig in die
+volle Quelle und durchläuft den unveränderten Write-Workflow (lock → DDIC → Syntax →
+aktivieren → unlock). Größter Token-Hebel bei iterativem Coding — der Agent gibt nicht
+mehr die komplette 800-Zeilen-Klasse aus, um eine Methode zu ändern.
+
+**Phase 2 — Dependency Contracts (`get_abap_contract` + `analyze_abap_context(mode=contract)`):**
+Komprimiert eine Klasse/Interface auf ihre öffentliche Signatur-Oberfläche (Methoden,
+Interfaces, Events, Public-Types/Data/Constants) — **ohne** Methodenrümpfe. Typischerweise
+5–10 % der Quellgröße. `analyze_abap_context` kann Main + Includes als Contracts statt als
+Volltext liefern.
+
+**Phase 3 — Source-Cache (`src/cache.ts`):**
+TTL-begrenzter In-Memory-Cache für `getObjectSource` (Default 30 s, `SOURCE_CACHE_TTL_MS`,
+0 = aus). Wiederholte Reads desselben Objekts (z.B. Context → Method → Contract) treffen den
+Cache. **Invalidierung** bei jedem erfolgreichen `setObjectSource` (Write) und Delete — es
+wird nie veralteter Quelltext nach einer Mutation ausgeliefert. `read_abap_source` und
+`analyze_abap_context` lesen über den Cache.
+
+**Phase 4 — Intent-Facade (`SAPRead`, `SAPWrite`, `SAPSearch`, `SAPDiagnose`):**
+Vier konsolidierte Verb-Tools mit `operation`-Discriminator, die an die granularen Handler
+delegieren (reine Routing-Schicht, keine Logik-Duplikate — erbt alle Safety-Guards). Clients
+ohne Deferred-Loading sehen ~4 statt 50 Schemata. Die 59 granularen Tools bleiben über
+`find_tools` verfügbar.
+
+**Phase 5 — Governance (`src/audit.ts`, Rollen):**
+Strukturiertes JSON-Audit-Log jeder verändernden Aktion (write/delete/execute) nach
+**STDERR** (nie STDOUT — das ist der MCP-Protokollkanal) und optional in `AUDIT_LOG_FILE`.
+Rollen `viewer`/`developer`/`admin` über `SAP_ROLE` (Default `admin` = bisheriges Verhalten,
+ALLOW_*-Flags bleiben die harte Schranke; Rollen können nur weiter einschränken).
+
+**Phase 6 — Analyse (`get_call_graph`, `find_dead_code`):**
+`get_call_graph` expandiert die Where-Used-Relation breitensuchend (Tiefe 1–4, Knoten-Cap)
+und rendert Mermaid + Kantenliste für Impact-Analyse. `find_dead_code` markiert Objekte ohne
+eingehende Verwendungen als Löschkandidaten (Hinweis — dynamische Calls sind im statischen
+Index unsichtbar).
+
+**Technisches:** Neue reine Helfer sind unit-getestet (`method-splice`, `contract`, `cache`).
+57 Tests grün, Build sauber. Tools: 50 → **59**, Kategorien: 14 → **16** (+ANALYSIS, +INTENT),
+Core-Tools: 13 → **18**.
+
+**Dateien:**
+- Neu: `src/cache.ts`, `src/audit.ts`, `src/helpers/method-splice.ts`, `src/helpers/contract.ts`,
+  `src/tools/handlers/method.ts`, `src/tools/handlers/contract.ts`, `src/tools/handlers/analysis.ts`,
+  `src/tools/handlers/intent.ts`
+- Neu (Tests): `test/method-splice.test.ts`, `test/contract.test.ts`, `test/cache.test.ts`
+- Geändert: `src/config.ts` (role, auditLogFile), `src/safety.ts` (assertRoleAllows, Rollen-Matrix),
+  `src/write-workflow.ts` (Cache-Invalidierung), `src/tools/handlers/{read,context,write,delete,query,batch}.ts`,
+  `src/schemas.ts`, `src/tools/tool-definitions.ts`, `src/tools/handler-map.ts`, `src/tools/tool-registry.ts`,
+  `.env.example`
+
+---
+
 ## 2026-05-30 — Wartung: Tests, Security-Fixes, Robustheit
 
 ### Verbesserung: Unit-Tests, Dependency-Sicherheit & Härtung

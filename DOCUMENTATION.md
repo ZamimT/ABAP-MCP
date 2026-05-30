@@ -40,13 +40,13 @@
 Der ABAP MCP Server ermöglicht KI-Assistenten (Claude, GitHub Copilot, Cursor usw.) direkten
 Zugriff auf ein SAP ABAP-System über die ADT REST API — ohne VS Code als Brücke.
 
-**50 Tools** in 14 Gruppen + 2 Meta-Tools + 1 MCP Prompt decken den kompletten ABAP-Entwicklungsworkflow ab:
+**59 Tools** in 16 Gruppen + 2 Meta-Tools + 1 MCP Prompt decken den kompletten ABAP-Entwicklungsworkflow ab:
 
 | Gruppe | Anzahl Tools | Beschreibung |
 |--------|-------------|--------------|
 | SEARCH | 2 | Objektsuche mit Wildcards, Quellcode-Volltextsuche |
-| READ | 11 | Quellcode, Metadaten, Where-Used, Code Completion, Definitionen, Revisionen, DDIC, Tabellenfelder, Tabelleninhalte, Fix-Vorschläge, Kontext-Analyse |
-| WRITE | 4 | Quellcode schreiben, aktivieren, Massen-Aktivierung, formatieren |
+| READ | 13 | Quellcode, **einzelne Methode** (`read_abap_method`), **Contract** (`get_abap_contract`), Metadaten, Where-Used, Code Completion, Definitionen, Revisionen, DDIC, Tabellenfelder, Tabelleninhalte, Fix-Vorschläge, Kontext-Analyse |
+| WRITE | 5 | Quellcode schreiben, **einzelne Methode ersetzen** (`edit_abap_method`), aktivieren, Massen-Aktivierung, formatieren |
 | CREATE | 7 | Programme, Klassen, Interfaces, FuGr, CDS, Tabellen, Messages |
 | DELETE | 1 | Objekte löschen |
 | TEST | 2 | Unit Tests ausführen, Test-Includes erstellen |
@@ -58,11 +58,14 @@ Zugriff auf ein SAP ABAP-System über die ADT REST API — ohne VS Code als Brü
 | DOCUMENTATION | 5 | ABAP-Keyword-Doku, Klassen-Doku, Modul-Best-Practices, Clean ABAP, ABAP-Syntax |
 | WEBSEARCH | 1 | Websuche in SAP Help, Community & Notes |
 | BATCH | 1 | Parallele Ausführung mehrerer Read-Only-Tools in einem MCP-Call |
+| ANALYSIS | 2 | Where-Used-Call-Graph (Mermaid), Dead-Code-Erkennung |
+| INTENT | 4 | Konsolidierte Verben `SAPRead`/`SAPWrite`/`SAPSearch`/`SAPDiagnose` |
 | META | 2 | Tool-Finder und Tool-Übersicht für dynamische Tool-Registrierung |
 | PROMPTS | 1 | `abap_develop` — Intelligenter ABAP-Entwicklungsworkflow |
 
-> **Token-Optimierung:** Mit `DEFER_TOOLS=true` (Default) werden initial nur 13 Kern-Tools geladen.
+> **Token-Optimierung:** Mit `DEFER_TOOLS=true` (Default) werden initial nur 18 Kern-Tools geladen.
 > Weitere Tools werden on-demand über `find_tools` aktiviert — das spart ~75-80% Tokens pro `tools/list`-Aufruf.
+> Für eine besonders kleine Tool-Oberfläche delegieren die vier **INTENT**-Verben an die granularen Tools.
 
 ---
 
@@ -231,14 +234,14 @@ MAX_DUMPS=50
 
 #### `find_tools`
 
-Findet und aktiviert ABAP-Tools nach Suchbegriff oder Kategorie. Wird nur im Deferred-Modus (`DEFER_TOOLS=true`) benötigt — dann werden initial nur 13 Kern-Tools geladen und weitere Tools on-demand über dieses Meta-Tool aktiviert.
+Findet und aktiviert ABAP-Tools nach Suchbegriff oder Kategorie. Wird nur im Deferred-Modus (`DEFER_TOOLS=true`) benötigt — dann werden initial nur 18 Kern-Tools geladen und weitere Tools on-demand über dieses Meta-Tool aktiviert.
 
 **Parameter:**
 
 | Parameter | Typ | Pflicht | Beschreibung |
 |-----------|-----|---------|--------------|
 | `query` | string | | Suchmuster für Tool-Namen/Beschreibungen |
-| `category` | string | | Kategorie: `SEARCH`, `READ`, `WRITE`, `CREATE`, `DELETE`, `TEST`, `QUALITY`, `DIAGNOSTICS`, `TRANSPORT`, `ABAPGIT`, `QUERY`, `DOCUMENTATION` |
+| `category` | string | | Kategorie: `SEARCH`, `READ`, `WRITE`, `CREATE`, `DELETE`, `TEST`, `QUALITY`, `DIAGNOSTICS`, `TRANSPORT`, `ABAPGIT`, `QUERY`, `DOCUMENTATION`, `WEBSEARCH`, `BATCH`, `ANALYSIS`, `INTENT` |
 | `enable` | boolean | | Tools aktivieren/deaktivieren (Default: true) |
 
 **Beispiele:**
@@ -253,7 +256,7 @@ Kategorieübersicht anzeigen
 → find_tools()
 ```
 
-**Kern-Tools (immer verfügbar):** `search_abap_objects`, `read_abap_source`, `write_abap_source`, `get_object_info`, `where_used`, `analyze_abap_context`, `search_abap_syntax`, `validate_ddic_references`, `batch_read`, `find_tools`, `list_tools`
+**Kern-Tools (immer verfügbar):** `search_abap_objects`, `search_source_code`, `read_abap_source`, `write_abap_source`, `get_object_info`, `where_used`, `analyze_abap_context`, `search_abap_syntax`, `validate_ddic_references`, `batch_read`, `search_sap_web`, `get_abap_contract`, `SAPRead`, `SAPWrite`, `SAPSearch`, `SAPDiagnose`, `find_tools`, `list_tools`
 
 ---
 
@@ -1526,6 +1529,120 @@ batch_read: 3 operations, 3 OK, 0 errors
 - Als **Kern-Tool** registriert — immer verfügbar, kein `find_tools` nötig
 - Fehlertoleranz: Einzelne fehlgeschlagene Operationen stoppen nicht den gesamten Batch
 - ADT hat keine native Batch-API — die Parallelisierung erfolgt im Node.js MCP Server
+
+---
+
+## Method-Level Surgery, Contracts, Analyse & Intent-Facade
+
+Diese Tools wurden ergänzt, um Token-Effizienz, Kontextkompression und Impact-Analyse
+zu verbessern. Sie nutzen denselben ADTClient und Write-Workflow wie die übrigen Tools.
+
+### READ — `read_abap_method`
+
+Liest einen einzelnen `METHOD…ENDMETHOD`-Block einer Klasse/eines Interfaces statt der
+ganzen Quelle. Token-sparend, wenn nur eine Methode interessiert.
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `objectUrl` | string | ✓ | ADT-URL der Klasse, z.B. `/sap/bc/adt/oo/classes/zcl_foo` |
+| `methodName` | string | ✓ | Methodenname (case-insensitiv). Interface-Methoden: `if_x~method` |
+
+```
+→ read_abap_method(objectUrl="/sap/bc/adt/oo/classes/zcl_foo", methodName="calculate")
+```
+
+### READ — `get_abap_contract`
+
+Gibt die komprimierte öffentliche Schnittstelle (Signaturen ohne Methodenrümpfe) einer
+Klasse/eines Interfaces zurück — typischerweise 5–10 % der Quellgröße. **Kern-Tool.**
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `objectUrl` | string | ✓ | ADT-URL einer Klasse oder eines Interface |
+
+> `analyze_abap_context(mode="contract")` liefert Main + Includes ebenfalls als Contracts statt Volltext.
+
+### WRITE — `edit_abap_method`
+
+Ersetzt einen einzelnen Methodenrumpf, ohne die ganze Klasse neu zu senden. Der Server
+splittet den neuen Rumpf in die volle Quelle und durchläuft `lock → DDIC → Syntax →
+aktivieren → unlock`. ⚠️ Erfordert `ALLOW_WRITE=true`.
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `objectUrl` | string | ✓ | ADT-URL der Klasse (ohne `/source/main`) |
+| `methodName` | string | ✓ | Name der zu ersetzenden Methode (case-insensitiv) |
+| `source` | string | ✓ | Neuer **Methodenrumpf** (Statements; `METHOD`/`ENDMETHOD` werden ergänzt/abgestreift) |
+| `transport` | string | | Transportauftrag |
+| `activateAfterWrite` | boolean | | Nach dem Schreiben aktivieren (Default: true) |
+| `skipSyntaxCheck` | boolean | | Syntaxcheck überspringen (nicht empfohlen) |
+
+```
+→ edit_abap_method(objectUrl="/sap/bc/adt/oo/classes/zcl_foo", methodName="add",
+                   source="    r = a + b.")
+```
+
+### ANALYSIS — `get_call_graph`
+
+Expandiert die Where-Used-Relation breitensuchend und rendert ein Mermaid-Diagramm plus
+Kantenliste. Für Impact-Analyse („was bricht, wenn ich das ändere?“).
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `objectUrl` | string | ✓ | ADT-URL des Wurzelobjekts |
+| `depth` | number | | Where-Used-Ebenen (1–4, Default 2) |
+| `maxNodes` | number | | Knoten-Cap (5–200, Default 60) |
+
+### ANALYSIS — `find_dead_code`
+
+Prüft eine Objektliste auf eingehende Verwendungen und markiert Objekte ohne Verwendung
+als Löschkandidaten. **Hinweis:** dynamische Calls (`CALL FUNCTION` zur Laufzeit, BAdIs,
+Dynpro-Ablauflogik) sind im statischen Where-Used-Index unsichtbar.
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `objectUrls` | string[] | ✓ | ADT-URLs der zu prüfenden Objekte (1–50) |
+
+### INTENT — `SAPRead` / `SAPWrite` / `SAPSearch` / `SAPDiagnose`
+
+Konsolidierte Verben für Clients, die eine kleine Tool-Oberfläche bevorzugen. Jedes Tool
+nimmt `operation` + `args` und delegiert an das granulare Tool — reine Routing-Schicht,
+alle Safety-Guards/Audit bleiben aktiv. **Kern-Tools.**
+
+| Tool | `operation`-Werte |
+|------|-------------------|
+| `SAPRead` | source, method, contract, info, where_used, table, table_fields, ddic, revisions, context |
+| `SAPWrite` | source, method, activate, pretty_print, create_program, create_class, create_interface, create_function_group, create_cds_view, create_table, create_message_class, delete |
+| `SAPSearch` | objects, source, call_graph, dead_code |
+| `SAPDiagnose` | syntax, atc, unit, ddic_validate, clean_abap, dumps, dump_detail, traces, trace_detail |
+
+```
+→ SAPRead(operation="contract", args={ objectUrl: "/sap/bc/adt/oo/classes/zcl_foo" })
+→ SAPWrite(operation="method", args={ objectUrl: "...", methodName: "add", source: "  r = a + b." })
+```
+
+---
+
+## Governance — Rollen & Audit
+
+**Rollen (`SAP_ROLE`):** schränken zusätzlich zu den `ALLOW_*`-Flags ein und können nur
+*weiter* einschränken, nie freischalten. Durchgesetzt via `assertRoleAllows()` in `safety.ts`.
+
+| Rolle | write | delete | execute |
+|-------|:-----:|:------:|:-------:|
+| `viewer` | – | – | – |
+| `developer` | ✓ | – | ✓ |
+| `admin` (Default) | ✓ | ✓ | ✓ |
+
+> Default `admin` = bisheriges Verhalten: die `ALLOW_*`-Flags bleiben die einzige Schranke.
+
+**Audit (`AUDIT_LOG_FILE`):** Jede verändernde Aktion (write/delete/execute) wird als
+JSON-Zeile protokolliert — immer nach **STDERR** (Präfix `AUDIT `, nie STDOUT = MCP-Kanal)
+und optional zusätzlich in die angegebene Datei. Felder: `ts`, `instance`, `user`, `role`,
+`tool`, `action`, `target`, `outcome`, `detail`.
+
+**Source-Cache (`SOURCE_CACHE_TTL_MS`):** TTL-Cache für `getObjectSource` (Default 30 s,
+`0` = aus). Writes/Deletes invalidieren automatisch — nie veralteter Quelltext nach einer Mutation.
 
 ---
 

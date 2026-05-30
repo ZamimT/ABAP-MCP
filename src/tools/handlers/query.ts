@@ -8,8 +8,9 @@ import type { ToolResult } from "../../types.js";
 import { S_Query, S_ExecuteSnippet } from "../../schemas.js";
 import { cfg } from "../../config.js";
 import { ADT_CORE_DISCOVERY, ADT_PROGRAMS, ADT_TMP_PACKAGE } from "../../adt-endpoints.js";
-import { assertWriteEnabled, assertSelectOnly } from "../../safety.js";
+import { assertWriteEnabled, assertSelectOnly, assertRoleAllows } from "../../safety.js";
 import { withWriteLock, withStatefulSession } from "../../concurrency.js";
+import { audit } from "../../audit.js";
 
 function ok(text: string): ToolResult { return { content: [{ type: "text", text }] }; }
 function err(text: string): ToolResult { return { content: [{ type: "text", text }], isError: true }; }
@@ -31,10 +32,12 @@ export async function handleRunSelectQuery(client: ADTClient, args: Record<strin
 
 export async function handleExecuteAbapSnippet(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
   assertWriteEnabled("Code execution");
+  assertRoleAllows("execute");
   if (!cfg.allowExecute)
     throw new McpError(ErrorCode.InvalidRequest,
       "Code execution is disabled. Set ALLOW_EXECUTE=true in .env (in addition to ALLOW_WRITE=true). ⚠️ Only enable on DEV systems!");
   const p = S_ExecuteSnippet.parse(args);
+  audit({ tool: "execute_abap_snippet", action: "execute", outcome: "attempt" });
 
   const FORBIDDEN = [
     /\bCOMMIT\s+WORK\b/i,

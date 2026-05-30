@@ -6,6 +6,8 @@ import type { ADTClient } from "abap-adt-api";
 import type { ToolResult } from "../../types.js";
 import { S_AnalyzeContext } from "../../schemas.js";
 import { ADT_PROGRAM_INCLUDES } from "../../adt-endpoints.js";
+import { getObjectSourceCached } from "../../cache.js";
+import { buildContract, renderContract } from "../../helpers/contract.js";
 
 function ok(text: string): ToolResult { return { content: [{ type: "text", text }] }; }
 
@@ -13,10 +15,10 @@ export async function handleAnalyzeAbapContext(client: ADTClient, args: Record<s
   const p = S_AnalyzeContext.parse(args);
   const baseUrl = p.objectUrl.replace(/\/source\/main$/, "");
   const isDeep = (p.depth ?? "deep") === "deep";
+  const isContract = (p.mode ?? "full") === "contract";
 
   const mainUrl = `${baseUrl}/source/main`;
-  const mainSrc = await client.getObjectSource(mainUrl);
-  const mainText = typeof mainSrc === "string" ? mainSrc : JSON.stringify(mainSrc);
+  const mainText = await getObjectSourceCached(client, mainUrl);
 
   const sections: string[] = [];
   let includeCount = 0;
@@ -276,13 +278,28 @@ export async function handleAnalyzeAbapContext(client: ADTClient, args: Record<s
   if (classMethods.length > 0) sections.push(`  Methods: ${classMethods.join(", ")}`);
   if (classAttributes.length > 0) sections.push(`  Attributes: ${classAttributes.join(", ")}`);
 
-  sections.push(`\n📄 SOURCE CODE (Main + Includes)`);
-  sections.push(`── MAIN (${baseUrl}) ──`);
-  sections.push(mainText);
-  for (const inc of includesList) {
-    if (inc.source) {
-      sections.push(`── ${inc.type.toUpperCase()} (${inc.uri}) ──`);
-      sections.push(inc.source);
+  if (isContract) {
+    sections.push(`\n📄 CONTRACTS (public signatures only — bodies omitted)`);
+    sections.push(`── MAIN (${baseUrl}) ──`);
+    sections.push(renderContract(buildContract(mainText, objectName)));
+    for (const inc of includesList) {
+      if (inc.source) {
+        const c = buildContract(inc.source, inc.uri);
+        if (c.kind !== "unknown" && c.members.length > 0) {
+          sections.push(`── ${inc.type.toUpperCase()} (${inc.uri}) ──`);
+          sections.push(renderContract(c));
+        }
+      }
+    }
+  } else {
+    sections.push(`\n📄 SOURCE CODE (Main + Includes)`);
+    sections.push(`── MAIN (${baseUrl}) ──`);
+    sections.push(mainText);
+    for (const inc of includesList) {
+      if (inc.source) {
+        sections.push(`── ${inc.type.toUpperCase()} (${inc.uri}) ──`);
+        sections.push(inc.source);
+      }
     }
   }
 

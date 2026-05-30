@@ -7,6 +7,7 @@ import type { ADTClient, ActivationResultMessage } from "abap-adt-api";
 import { withWriteLock, withStatefulSession } from "./concurrency.js";
 import { resolveMainProgram, resolveSyntaxContext } from "./helpers/resolve.js";
 import { validateDdicReferencesInternal } from "./helpers/ddic-validation.js";
+import { invalidateSource } from "./cache.js";
 
 export function formatActivationMessages(messages: ActivationResultMessage[]): string[] {
   return messages.map(m =>
@@ -40,6 +41,8 @@ export async function writeWorkflow(
       log.push(`✏️  Writing source code (${source.length} characters)...`);
       const sourceUrl = objectUrl.endsWith("/source/main") ? objectUrl : `${objectUrl}/source/main`;
       await client.setObjectSource(sourceUrl, source, lockHandle, transport || undefined);
+      // Server copy changed — drop any cached source so subsequent reads revalidate.
+      invalidateSource(objectUrl);
       log.push("✅ Source code saved");
       await onProgress?.("✏️ Source code saved");
 

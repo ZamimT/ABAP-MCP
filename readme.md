@@ -1,6 +1,6 @@
 # ABAP MCP Server
 
-Standalone MCP Server für agentives ABAP-Development — 50+ Tools via ADT REST API.
+Standalone MCP Server für agentives ABAP-Development — 59 Tools via ADT REST API.
 
 ---
 
@@ -20,12 +20,39 @@ Die meisten ADT-Bridges sprechen nur direktes HTTPS. Dieser Server probiert vier
 ### Weitere starke Merkmale
 
 - **🔁 Rekursives Coding bis zur erfolgreichen Aktivierung** — Der Write-Workflow läuft `lock → write → Syntaxcheck → aktivieren → unlock` und **aktiviert nur bei sauberem Syntaxcheck**. Schlägt etwas fehl, bekommt der Agent die konkrete Fehlerliste zurück und korrigiert iterativ weiter, bis das Objekt fehlerfrei aktiviert ist. Du erhältst aktivierten, lauffähigen Code statt eines Entwurfs mit roten Markern.
-- **🎯 Deferred Tools — ~75–80 % Token-Ersparnis** — Statt alle 50 Tools in jeden Kontext zu laden, startet der Server mit nur **13 Core-Tools**. Der Rest wird bei Bedarf über das Meta-Tool `find_tools` aktiviert (`find_tools(category=…)` oder `find_tools(query=…)`).
+- **🎯 Deferred Tools — ~75–80 % Token-Ersparnis** — Statt alle 59 Tools in jeden Kontext zu laden, startet der Server mit nur **18 Core-Tools**. Der Rest wird bei Bedarf über das Meta-Tool `find_tools` aktiviert (`find_tools(category=…)` oder `find_tools(query=…)`).
+- **✂️ Method-Level Surgery** — `read_abap_method` / `edit_abap_method` lesen bzw. ersetzen einen einzelnen `METHOD…ENDMETHOD`-Block. Der Agent gibt nicht mehr die ganze Klasse aus, um eine Methode zu ändern — der Server splittet den neuen Rumpf server-seitig in die Quelle und durchläuft den normalen Write-Workflow. Größter Token-Hebel bei iterativem Coding.
+- **🗜️ Dependency Contracts** — `get_abap_contract` (und `analyze_abap_context(mode=contract)`) komprimieren eine Klasse/Interface auf ihre öffentliche Signatur-Oberfläche ohne Methodenrümpfe — typischerweise 5–10 % der Quellgröße. So bekommt der Agent die API einer Abhängigkeit billig, bevor er dagegen codet.
+- **⚡ Source-Cache** — TTL-Cache für `getObjectSource` (`SOURCE_CACHE_TTL_MS`, Default 30 s); wiederholte Reads treffen den Cache, Writes/Deletes invalidieren automatisch — nie veralteter Quelltext nach einer Mutation.
+- **🧰 Intent-Facade** — vier konsolidierte Verben `SAPRead`/`SAPWrite`/`SAPSearch`/`SAPDiagnose` für Clients, die eine kleine Tool-Oberfläche statt 59 Einzeltools wollen. Reine Routing-Schicht — alle Safety-Guards bleiben aktiv.
+- **🛂 Governance (Rollen + Audit)** — Rollen `viewer`/`developer`/`admin` (`SAP_ROLE`) schränken zusätzlich zu den ALLOW_*-Flags ein; jede verändernde Aktion wird als JSON-Audit-Zeile nach STDERR (und optional `AUDIT_LOG_FILE`) protokolliert.
+- **🕸️ Impact-Analyse** — `get_call_graph` rendert den rekursiven Where-Used-Graph als Mermaid-Diagramm; `find_dead_code` markiert Objekte ohne eingehende Verwendungen als Löschkandidaten.
 - **🧠 Voller Kontext vor dem Schreiben** — `analyze_abap_context`, `where_used` und `read_abap_source(includeRelated=true)` lesen rekursiv alle verbundenen Objekte (Includes, Funktionsbausteine, Klassen), damit der Agent das gesamte Programm versteht, bevor er es anfasst.
 - **⚡ Sichere Ad-hoc-Ausführung** — `execute_abap_snippet` führt Code in einem temporären `$TMP`-Programm aus und **löscht es immer** (auch bei Laufzeitfehlern). Eine statische Verbotsliste (`COMMIT WORK`, DB-`INSERT/UPDATE/DELETE`, …) blockiert datenverändernde Operationen vorab.
 - **🛡️ Default-sichere Safety-Guards** — Schreiben, Löschen und Ausführen sind standardmäßig **deaktiviert** und müssen explizit freigeschaltet werden. Kundennamensraum-Zwang (Z/Y) und `BLOCKED_PACKAGES` schützen SAP-eigene Objekte. PROD bleibt komplett gesperrt.
 - **🔒 Concurrency-Safe** — Serieller Write-Lock und Stateful-Sessions mit automatischer Lock-Recovery verhindern Konflikte bei parallelen Schreiboperationen.
 - **📚 Integrierte SAP-Doku-Suche** — `search_sap_web` und versionsabhängige help.sap.com-Verweise (`SAP_ABAP_VERSION`) liefern dem Agenten aktuelle, korrekte Referenzen statt veraltetem Trainingswissen.
+
+### Token-effizient arbeiten — Beispiele
+
+```jsonc
+// Nur die API-Oberfläche einer Abhängigkeit holen (statt der ganzen Klasse):
+get_abap_contract({ objectUrl: "/sap/bc/adt/oo/classes/zcl_billing" })
+
+// Eine einzelne Methode lesen bzw. ersetzen (statt Voll-Read/-Write der Klasse):
+read_abap_method({ objectUrl: "/sap/bc/adt/oo/classes/zcl_billing", methodName: "calculate" })
+edit_abap_method({ objectUrl: "/sap/bc/adt/oo/classes/zcl_billing",
+                   methodName: "calculate", source: "    rv_total = iv_net * ( 1 + iv_tax )." })
+
+// Kontext als komprimierte Contracts statt Volltext:
+analyze_abap_context({ objectUrl: "...", mode: "contract" })
+
+// Impact-Analyse vor einer Änderung:
+get_call_graph({ objectUrl: "/sap/bc/adt/oo/classes/zcl_billing", depth: 2 })
+
+// Kleine Tool-Oberfläche via Intent-Verben (delegiert an die granularen Tools):
+SAPRead({ operation: "method", args: { objectUrl: "...", methodName: "calculate" } })
+```
 
 ---
 
@@ -59,7 +86,7 @@ Wenn alles klappt, siehst du:
   User    : <USERNAME>  Client: <CLIENT>  Lang: EN
   Write   : ❌ deaktiviert
   Delete  : ❌ deaktiviert
-  Tools   : 13 initial (50 gesamt, deferred)
+  Tools   : 18 initial (59 gesamt, deferred)
   Doku    : help.sap.com vlatest
   Prompts : 1 (abap_develop)
   ADT     : ✅ Verbunden
@@ -189,12 +216,23 @@ ALLOW_DELETE=false
 ALLOW_EXECUTE=false
 BLOCKED_PACKAGES=SAP,SHD,SMOD
 
+# Governance (Rollen & Audit)
+# SAP_ROLE schränkt zusätzlich zu den ALLOW_*-Flags ein (kann nur weiter
+# einschränken, nie freischalten): viewer = nur lesen, developer = write+execute
+# (kein delete), admin = alles (Default = bisheriges Verhalten).
+SAP_ROLE=admin
+# Optionales JSON-Audit-Log aller verändernden Aktionen (zusätzlich immer nach STDERR).
+AUDIT_LOG_FILE=
+
 # Optionen
 SYNTAX_CHECK_BEFORE_ACTIVATE=true
 DEFER_TOOLS=true
 SAP_ABAP_VERSION=latest
 DEFAULT_TRANSPORT=
 MAX_DUMPS=20
+# Source-Cache-TTL in ms für getObjectSource (Default 30000; 0 = aus).
+# Writes/Deletes invalidieren automatisch.
+SOURCE_CACHE_TTL_MS=30000
 
 # Web Search (optional — für search_sap_web Tool)
 TAVILY_API_KEY=
@@ -209,6 +247,7 @@ Du brauchst die Credentials **nicht** in der MCP-Config zu wiederholen — der S
 | `ALLOW_WRITE` | `true` | `false` | `false` |
 | `ALLOW_DELETE` | `false` | `false` | `false` |
 | `ALLOW_EXECUTE` | `true` | `false` | `false` |
+| `SAP_ROLE` | `admin`/`developer` | `viewer` | `viewer` |
 
 ---
 

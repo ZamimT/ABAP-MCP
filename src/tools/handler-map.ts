@@ -45,6 +45,10 @@ import { handleAnalyzeAbapContext } from "./handlers/context.js";
 import { handleSearchSapWeb } from "./handlers/websearch.js";
 import { handleBatchRead } from "./handlers/batch.js";
 import { handleFindTools, handleListTools } from "./handlers/meta.js";
+import { handleReadAbapMethod, handleEditAbapMethod } from "./handlers/method.js";
+import { handleGetAbapContract } from "./handlers/contract.js";
+import { handleGetCallGraph, handleFindDeadCode } from "./handlers/analysis.js";
+import { handleSapRead, handleSapWrite, handleSapSearch, handleSapDiagnose } from "./handlers/intent.js";
 
 // ── Dispatch map ────────────────────────────────────────────────────────────
 
@@ -55,6 +59,8 @@ export const HANDLER_MAP: Map<string, ToolHandler> = new Map([
 
   // READ
   ["read_abap_source",        handleReadAbapSource],
+  ["read_abap_method",        handleReadAbapMethod],
+  ["get_abap_contract",       handleGetAbapContract],
   ["get_object_info",         handleGetObjectInfo],
   ["where_used",              handleWhereUsed],
   ["get_code_completion",     handleGetCodeCompletion],
@@ -68,6 +74,7 @@ export const HANDLER_MAP: Map<string, ToolHandler> = new Map([
 
   // WRITE
   ["write_abap_source",       handleWriteAbapSource],
+  ["edit_abap_method",        handleEditAbapMethod],
   ["activate_abap_object",    handleActivateAbapObject],
   ["mass_activate",           handleMassActivate],
   ["pretty_print",            handlePrettyPrint],
@@ -128,6 +135,16 @@ export const HANDLER_MAP: Map<string, ToolHandler> = new Map([
 
   // BATCH
   ["batch_read",              handleBatchRead],
+
+  // ANALYSIS
+  ["get_call_graph",          handleGetCallGraph],
+  ["find_dead_code",          handleFindDeadCode],
+
+  // INTENT FACADE
+  ["SAPRead",                 handleSapRead],
+  ["SAPWrite",                handleSapWrite],
+  ["SAPSearch",               handleSapSearch],
+  ["SAPDiagnose",             handleSapDiagnose],
 
   // META
   ["find_tools",              handleFindTools],

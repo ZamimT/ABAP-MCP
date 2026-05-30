@@ -237,6 +237,8 @@ export const S_AnalyzeContext = z.object({
   objectUrl: z.string().describe("ADT URL of the main object"),
   depth: z.enum(["shallow", "deep"]).default("deep").optional()
     .describe("shallow = main source + direct includes only; deep = recursively all references"),
+  mode: z.enum(["full", "contract"]).default("full").optional()
+    .describe("full = embed complete source of main + includes; contract = compress each to its public signatures only (much fewer tokens — use when you only need the API surface, not the bodies)"),
 });
 
 // --- DOCUMENTATION ---
@@ -308,6 +310,63 @@ export const S_SearchSapWeb = z.object({
     .describe("Which sources to search: 'help' (help.sap.com), 'community' (community.sap.com), 'notes' (me.sap.com). Default: all three."),
   maxResults: z.number().int().min(1).max(10).default(5).optional()
     .describe("Maximum results per source (1–10, default: 5)"),
+});
+
+// --- METHOD-LEVEL SURGERY ---
+export const S_ReadMethod = z.object({
+  objectUrl:  z.string().describe("ADT URL of the class/interface, e.g. /sap/bc/adt/oo/classes/zcl_foo"),
+  methodName: z.string().describe("Method name (case-insensitive). For interface methods use 'if_x~method'."),
+});
+export const S_EditMethod = z.object({
+  objectUrl:          z.string().describe("ADT URL of the class (without /source/main)"),
+  methodName:         z.string().describe("Name of the method to replace (case-insensitive)"),
+  source:             z.string().describe(
+    "New method BODY — the statements between METHOD…ENDMETHOD (no METHOD/ENDMETHOD keywords needed; " +
+    "if you include them they are stripped). The original METHOD header and indentation are preserved. " +
+    "Far cheaper than rewriting the whole class with write_abap_source."),
+  transport:          z.string().optional().describe("Transport request"),
+  activateAfterWrite: z.boolean().default(true).optional().describe("Activate after writing (default: true)"),
+  skipSyntaxCheck:    z.boolean().default(false).optional().describe("Skip syntax check (not recommended)"),
+});
+
+// --- CONTRACT (context compression) ---
+export const S_GetContract = z.object({
+  objectUrl: z.string().describe("ADT URL of a class or interface, e.g. /sap/bc/adt/oo/classes/zcl_foo"),
+});
+
+// --- ANALYSIS (call graph, dead code) ---
+export const S_CallGraph = z.object({
+  objectUrl: z.string().describe("ADT URL of the object to analyze (the graph root)"),
+  depth:     z.number().int().min(1).max(4).default(2).optional()
+    .describe("How many where-used levels to expand (1–4, default 2)"),
+  maxNodes:  z.number().int().min(5).max(200).default(60).optional()
+    .describe("Node cap to keep the graph readable (default 60)"),
+});
+export const S_FindDeadCode = z.object({
+  objectUrls: z.array(z.string()).min(1).max(50)
+    .describe("ADT URLs of objects to check for inbound usages (1–50). Objects with zero usages are flagged as removal candidates."),
+});
+
+// --- INTENT FACADE ---
+export const S_IntentRead = z.object({
+  operation: z.string().describe(
+    "What to read: source | method | contract | info | where_used | table | table_fields | ddic | revisions | context"),
+  args: z.record(z.unknown()).optional().describe("Arguments for the underlying tool (same shape as the granular tool)"),
+});
+export const S_IntentWrite = z.object({
+  operation: z.string().describe(
+    "What to write: source | method | activate | pretty_print | create_program | create_class | create_interface | " +
+    "create_function_group | create_cds_view | create_table | create_message_class | delete"),
+  args: z.record(z.unknown()).optional().describe("Arguments for the underlying tool (same shape as the granular tool)"),
+});
+export const S_IntentSearch = z.object({
+  operation: z.string().describe("What to search: objects | source | call_graph | dead_code"),
+  args: z.record(z.unknown()).optional().describe("Arguments for the underlying tool"),
+});
+export const S_IntentDiagnose = z.object({
+  operation: z.string().describe(
+    "What to diagnose: syntax | atc | unit | ddic_validate | clean_abap | dumps | dump_detail | traces | trace_detail"),
+  args: z.record(z.unknown()).optional().describe("Arguments for the underlying tool"),
 });
 
 // --- META TOOLS ---

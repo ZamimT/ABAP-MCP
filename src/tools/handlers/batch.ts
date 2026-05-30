@@ -15,6 +15,8 @@ function err(text: string): ToolResult { return { content: [{ type: "text", text
 /** Tools that are NEVER allowed in batch_read (mutating operations) */
 const BLOCKED_TOOLS = new Set([
   "write_abap_source",
+  "edit_abap_method",
+  "SAPWrite",
   "activate_abap_object",
   "mass_activate",
   "pretty_print",

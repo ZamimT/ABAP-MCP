@@ -6,7 +6,28 @@
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { cfg } from "./config.js";
 
+/**
+ * Capabilities each role is permitted to exercise. Roles can only *restrict*
+ * relative to the ALLOW_* flags — the flags remain a hard prerequisite, this
+ * matrix is an additional gate on top. "admin" (the default) permits all three,
+ * so legacy setups that never set SAP_ROLE behave exactly as before.
+ */
+const ROLE_CAPABILITIES: Record<typeof cfg.role, ReadonlySet<"write" | "delete" | "execute">> = {
+  viewer: new Set(),
+  developer: new Set(["write", "execute"] as const),
+  admin: new Set(["write", "delete", "execute"] as const),
+};
+
+/** Throw unless the configured role may exercise `capability`. */
+export function assertRoleAllows(capability: "write" | "delete" | "execute"): void {
+  if (!ROLE_CAPABILITIES[cfg.role].has(capability))
+    throw new McpError(ErrorCode.InvalidRequest,
+      `Role '${cfg.role}' is not permitted to ${capability}. ` +
+      `Set SAP_ROLE to a role that allows it (developer = write/execute, admin = all).`);
+}
+
 export function assertWriteEnabled(action = "Write"): void {
+  assertRoleAllows("write");
   if (!cfg.allowWrite)
     throw new McpError(ErrorCode.InvalidRequest,
       `${action} is disabled. Set ALLOW_WRITE=true in .env. ` +
@@ -14,6 +35,7 @@ export function assertWriteEnabled(action = "Write"): void {
 }
 
 export function assertDeleteEnabled(): void {
+  assertRoleAllows("delete");
   if (!cfg.allowDelete)
     throw new McpError(ErrorCode.InvalidRequest,
       "Delete is disabled. Set ALLOW_DELETE=true in .env. ⚠️  This action cannot be undone!");

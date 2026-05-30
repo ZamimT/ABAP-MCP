@@ -19,6 +19,12 @@ export const TOOLS: ToolDef[] = [
   { name: "read_abap_source",
     description: "Reads the source code of an ABAP object. With includeRelated=true all related objects are automatically read: class includes (definitions, implementations, macros, test classes), program includes (INCLUDE statements resolved), function groups (all function modules). Recommendation: use includeRelated=true to understand the full context before making changes.",
     schema: S.S_ReadSource },
+  { name: "read_abap_method",
+    description: "Reads a SINGLE method (METHOD…ENDMETHOD block) of a class/interface instead of the whole source. Token-efficient way to inspect one method. Pass objectUrl + methodName (case-insensitive; 'if_x~method' for interface methods).",
+    schema: S.S_ReadMethod },
+  { name: "get_abap_contract",
+    description: "Returns the COMPRESSED public interface (signatures, no method bodies) of a class or interface — typically 5–10% of the full source. Use to give an agent the API surface of a dependency cheaply before writing code against it.",
+    schema: S.S_GetContract },
   { name: "get_object_info",
     description: "Reads detailed metadata and structure of an object: methods, attributes, includes, enqueue info, DDIC fields, etc.",
     schema: S.S_ObjectInfo },
@@ -40,6 +46,9 @@ export const TOOLS: ToolDef[] = [
       "**Comments:** Full-line comments with `*` MUST start in column 1 (no indentation). For indented comments use `\"` instead.\n" +
       "⚠️ Requires ALLOW_WRITE=true.",
     schema: S.S_WriteSource },
+  { name: "edit_abap_method",
+    description: "Rewrites a SINGLE method of a class without resending the whole class source. Pass objectUrl + methodName + the new method BODY (statements only — METHOD/ENDMETHOD are added automatically). The server splices it into the full source and runs the standard lock → DDIC → syntax → activate → unlock workflow. Dramatically cheaper than write_abap_source for one-method changes. ⚠️ Requires ALLOW_WRITE=true.",
+    schema: S.S_EditMethod },
   { name: "activate_abap_object",
     description: "Activates an already saved ABAP object. Useful after manual changes or for reactivation after errors. ⚠️ Requires ALLOW_WRITE=true.",
     schema: S.S_Activate },
@@ -225,4 +234,26 @@ export const TOOLS: ToolDef[] = [
       "Use for: error messages, SAP Notes, best practices, blog posts, KBAs, migration guides. " +
       "Requires TAVILY_API_KEY in .env.",
     schema: S.S_SearchSapWeb },
+
+  // ── ANALYSIS ───────────────────────────────────────────────────────────
+  { name: "get_call_graph",
+    description: "Builds a where-used (reverse-dependency) graph for an object, expanded breadth-first up to 'depth' levels, and renders it as a Mermaid diagram plus an edge list. Use for impact analysis: 'what breaks if I change this?'. Node-capped for readability.",
+    schema: S.S_CallGraph },
+  { name: "find_dead_code",
+    description: "Checks a list of objects for inbound usages and flags those with none as removal candidates. Hint only — dynamic calls (CALL FUNCTION built at runtime, BAdIs, dynpro flow) are invisible to the static where-used index, so verify before deleting.",
+    schema: S.S_FindDeadCode },
+
+  // ── INTENT FACADE (consolidated verbs — minimal schema footprint) ────────
+  { name: "SAPRead",
+    description: "Consolidated READ verb. Delegates by 'operation': source | method | contract | info | where_used | table | table_fields | ddic | revisions | context. Pass 'args' exactly as the underlying granular tool expects. Use this when you want a small tool surface instead of the 50 granular tools.",
+    schema: S.S_IntentRead },
+  { name: "SAPWrite",
+    description: "Consolidated WRITE verb. Delegates by 'operation': source | method | activate | pretty_print | create_program | create_class | create_interface | create_function_group | create_cds_view | create_table | create_message_class | delete. Inherits all safety guards (ALLOW_WRITE/DELETE, role, audit) from the delegate. Pass 'args' as the granular tool expects.",
+    schema: S.S_IntentWrite },
+  { name: "SAPSearch",
+    description: "Consolidated SEARCH verb. Delegates by 'operation': objects | source | call_graph | dead_code. Pass 'args' as the underlying tool expects.",
+    schema: S.S_IntentSearch },
+  { name: "SAPDiagnose",
+    description: "Consolidated QUALITY/DIAGNOSTICS verb. Delegates by 'operation': syntax | atc | unit | ddic_validate | clean_abap | dumps | dump_detail | traces | trace_detail. Pass 'args' as the underlying tool expects.",
+    schema: S.S_IntentDiagnose },
 ];
