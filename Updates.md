@@ -2,6 +2,36 @@
 
 ---
 
+## 2026-06-02 — SAP Business Workflow-Analyse: `analyze_workflow`
+
+### Feature: Read-only Workflow-Analyse (SWDD / klassischer WF)
+
+**Hintergrund:** SAP Business Workflow (Transaktion SWDD) speichert seine Metadaten in eigenen
+Tabellen außerhalb des normalen ADT-Objektsystems. Das ADT REST API bietet keine dedizierten
+Workflow-Endpunkte. Das neue Tool nutzt stattdessen `client.runQuery()` (ADT SELECT), um die
+Standard-Workflow-Tabellen abzufragen — vollständig read-only, kein `ALLOW_WRITE` nötig.
+
+**Neues Tool:** `analyze_workflow`
+- 4 Modi: `definitions` (Workflow-Templates), `instances` (laufende/beendete WF-Instanzen),
+  `steps` (Schrittdefinitionen eines Workflows), `agents` (Agenten-/Rollenzuweisungen)
+- Tabellen: `SWF_FLEX_HEADER` (flexible WF, NW 7.40+), `SWFTASKI` (klassisch),
+  `SWWWIHEAD` (Instanzen), `SWF_FLEX_STEP`, `SWFSTEPDEF`, `SWF_FLEX_ROLE`, `SWWUSERWI`
+- Resilientes `safeQuery`-Muster: fehlt eine Tabelle im System, wird ein Hinweis ausgegeben statt
+  der gesamte Aufruf zu scheitern
+- Status-Labels (`WISTA`): numerische Codes werden in lesbare Labels umgewandelt
+  (WAITING/READY/STARTED/COMPLETED/ERROR/…)
+- Via `SAPDiagnose(operation="workflow")` — immer ohne `find_tools` erreichbar
+
+**Geänderte Dateien:**
+- `src/schemas.ts` — `S_AnalyzeWorkflow`
+- `src/tools/handlers/workflow.ts` — neuer Handler (neu)
+- `src/tools/tool-definitions.ts` — Tool-Metadaten + `SAPDiagnose`-Beschreibung
+- `src/tools/handler-map.ts` — Import + Dispatch-Eintrag
+- `src/tools/tool-registry.ts` — QUERY-Kategorie + Short Description
+- `src/tools/handlers/intent.ts` — `DIAGNOSE_OPS.workflow`
+
+---
+
 ## 2026-05-30 — RAP vollständig: `create_behavior_definition` (BDEF, direkter ADT-HTTP)
 
 ### Feature: BDEF-Anlage ohne Library-Support

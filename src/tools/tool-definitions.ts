@@ -159,6 +159,17 @@ export const TOOLS: ToolDef[] = [
     schema: S.S_GitPull },
 
   // ── QUERY ───────────────────────────────────────────────────────────────
+  { name: "analyze_workflow",
+    description:
+      "Analyzes SAP Business Workflow (classic WF / SWDD) metadata by querying standard workflow tables. " +
+      "No ALLOW_WRITE required — read-only via ADT runQuery.\n" +
+      "Modes:\n" +
+      "  • definitions — list workflow templates from SWF_FLEX_HEADER (flexible WF, NW 7.40+) and SWFTASKI (classic WS tasks)\n" +
+      "  • instances   — list running/completed workflow instances from SWWWIHEAD (filterable by status, user, workflowId)\n" +
+      "  • steps       — show step definitions for a specific workflow (SWF_FLEX_STEP + SWFSTEPDEF, requires workflowId)\n" +
+      "  • agents      — show agent/role assignments for a specific workflow (SWF_FLEX_ROLE + SWWUSERWI, requires workflowId)\n" +
+      "Workflow IDs have the format WS<8 digits> (e.g. WS12300111). Transaction SWDD shows all workflows.",
+    schema: S.S_AnalyzeWorkflow },
   { name: "run_select_query",
     description: "Executes a SELECT statement directly against SAP tables. Returns result rows as JSON. Only read-only access is allowed.",
     schema: S.S_Query },
@@ -272,6 +283,6 @@ export const TOOLS: ToolDef[] = [
     description: "Consolidated SEARCH verb. Delegates by 'operation': objects | source | call_graph | dead_code. Pass 'args' as the underlying tool expects.",
     schema: S.S_IntentSearch },
   { name: "SAPDiagnose",
-    description: "Consolidated QUALITY/DIAGNOSTICS verb. Delegates by 'operation': syntax | atc | unit | ddic_validate | clean_abap | dumps | dump_detail | traces | trace_detail. Pass 'args' as the underlying tool expects.",
+    description: "Consolidated QUALITY/DIAGNOSTICS verb. Delegates by 'operation': syntax | atc | unit | ddic_validate | clean_abap | dumps | dump_detail | traces | trace_detail | workflow. Pass 'args' as the underlying tool expects.",
     schema: S.S_IntentDiagnose },
 ];

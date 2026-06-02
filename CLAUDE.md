@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-ABAP MCP Server v2 is a standalone Model Context Protocol (MCP) server that enables AI assistants (Claude, Copilot, Cursor) to interact with SAP ABAP systems via the ADT REST API. It implements 65 tools across 16 categories + 2 meta-tools (`find_tools`, `list_tools`) + 1 MCP Prompt (`abap_develop`) for full ABAP development workflow support.
+ABAP MCP Server v2 is a standalone Model Context Protocol (MCP) server that enables AI assistants (Claude, Copilot, Cursor) to interact with SAP ABAP systems via the ADT REST API. It implements 66 tools across 16 categories + 2 meta-tools (`find_tools`, `list_tools`) + 1 MCP Prompt (`abap_develop`) for full ABAP development workflow support.
 
 ## Build & Development Commands
 
@@ -67,7 +67,7 @@ npm run clean
 - **Schema Validation**: Zod for all tool parameters (30+ schemas in `src/schemas.ts`)
 - **Tool Groups**: SEARCH, READ, WRITE, CREATE, DELETE, TEST, QUALITY, DIAGNOSTICS, TRANSPORT, ABAPGIT, QUERY, DOCUMENTATION, WEBSEARCH, BATCH, ANALYSIS (call graph, dead-code), INTENT (consolidated verbs)
 - **Deferred Loading** (default): Only 12 core tools (`find_tools`, `list_tools`, `analyze_abap_context`, `search_abap_syntax`, `validate_ddic_references`, `batch_read`, `search_sap_web`, `get_abap_contract`, `SAPRead`, `SAPWrite`, `SAPSearch`, `SAPDiagnose`) loaded initially; granular tools (`search_abap_objects`, `search_source_code`, `read_abap_source`, `write_abap_source`, `get_object_info`, `where_used`) are deferred — covered by the intent facade when needed; others activated on-demand via `find_tools` meta-tool (~75-80% token savings)
-- **Intent Facade**: `SAPRead`/`SAPWrite`/`SAPSearch`/`SAPDiagnose` (in `handlers/intent.ts`) delegate to granular handlers via an `operation` discriminator so clients can use ~4 verbs instead of 59 tools. Pure routing — safety guards/audit inherited from the delegate.
+- **Intent Facade**: `SAPRead`/`SAPWrite`/`SAPSearch`/`SAPDiagnose` (in `handlers/intent.ts`) delegate to granular handlers via an `operation` discriminator so clients can use ~4 verbs instead of 59 tools. Pure routing — safety guards/audit inherited from the delegate. `SAPDiagnose` also covers `workflow` → `analyze_workflow`.
 - **Method-level surgery**: `read_abap_method` / `edit_abap_method` read or rewrite a single `METHOD…ENDMETHOD` block (helper `helpers/method-splice.ts`). `edit_abap_method` splices the new body into the full source and runs the normal write workflow.
 - **Context compression**: `get_abap_contract` and `analyze_abap_context(mode=contract)` emit public signatures only (helper `helpers/contract.ts`), ~5–10% of full source.
 - **Analysis**: `get_call_graph` (recursive where-used → Mermaid) and `find_dead_code` (objects with no inbound usages).

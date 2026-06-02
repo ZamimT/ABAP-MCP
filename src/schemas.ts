@@ -401,8 +401,28 @@ export const S_IntentSearch = z.object({
 });
 export const S_IntentDiagnose = z.object({
   operation: z.string().describe(
-    "What to diagnose: syntax | atc | unit | ddic_validate | clean_abap | dumps | dump_detail | traces | trace_detail"),
+    "What to diagnose: syntax | atc | unit | ddic_validate | clean_abap | dumps | dump_detail | traces | trace_detail | workflow"),
   args: z.record(z.unknown()).optional().describe("Arguments for the underlying tool"),
+});
+
+// --- WORKFLOW ANALYSIS ---
+export const S_AnalyzeWorkflow = z.object({
+  mode: z.enum(["definitions", "instances", "steps", "agents"]).default("definitions")
+    .describe(
+      "What to analyze: " +
+      "'definitions' = list workflow templates (SWF_FLEX_HEADER + SWFTASKI), " +
+      "'instances' = list running/completed workflow instances (SWWWIHEAD), " +
+      "'steps' = show step definitions for one workflow (needs workflowId), " +
+      "'agents' = show agent/role assignments for one workflow (needs workflowId)"
+    ),
+  workflowId: z.string().optional()
+    .describe("Workflow or task ID, e.g. 'WS12300111' (Workflow) or 'TS12300120' (Task). Required for modes 'steps' and 'agents'."),
+  status: z.enum(["all", "READY", "STARTED", "COMPLETED", "ERROR"]).default("all").optional()
+    .describe("Filter instances by status (mode='instances' only). Default: all"),
+  maxResults: z.number().int().min(1).max(100).default(20).optional()
+    .describe("Max results to return (default: 20)"),
+  user: z.string().optional()
+    .describe("Filter instances by SAP user/agent (mode='instances' only)"),
 });
 
 // --- META TOOLS ---

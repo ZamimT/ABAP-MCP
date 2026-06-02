@@ -65,6 +65,7 @@ const DIAGNOSE_OPS: Record<string, string> = {
   dump_detail: "get_short_dump_detail",
   traces: "get_traces",
   trace_detail: "get_trace_detail",
+  workflow: "analyze_workflow",
 };
 
 async function dispatch(

@@ -1,6 +1,6 @@
 # ABAP MCP Server
 
-Standalone MCP Server für agentives ABAP-Development — 65 Tools via ADT REST API.
+Standalone MCP Server für agentives ABAP-Development — 66 Tools via ADT REST API.
 
 ---
 
@@ -88,7 +88,7 @@ Wenn alles klappt, siehst du:
   User    : <USERNAME>  Client: <CLIENT>  Lang: EN
   Write   : ❌ deaktiviert
   Delete  : ❌ deaktiviert
-  Tools   : 12 initial (65 gesamt, deferred)
+  Tools   : 12 initial (66 gesamt, deferred)
   Doku    : help.sap.com vlatest
   Prompts : 1 (abap_develop)
   ADT     : ✅ Verbunden
@@ -104,10 +104,11 @@ ein MCP-Server über die ADT REST API. Der Vergleich zeigt, wo die Unterschiede 
 
 | Feature | Dieser MCP | SAP ADT for VS Code |
 |---|---|---|
-| **Tool-Anzahl** | **65 Tools** | ~10 Capability-Kategorien |
+| **Tool-Anzahl** | **66 Tools** | ~10 Capability-Kategorien |
 | **IDE-Bindung** | Keine — jeder MCP-Client | VS Code only |
 | **Systemunterstützung** | ECC 6.0+, S/4HANA on-prem, BTP | BTP-optimiert; on-prem sekundär |
 | **Klassisches ABAP** (Programme, FuGr, BAPIs, Nachrichten) | ✅ Vollständig | ❌ Nicht geplant |
+| **SAP Business Workflow (SWDD)** | ✅ `analyze_workflow` (definitions/instances/steps/agents) | ❌ |
 | **CDS Views (DDLS)** | ✅ | ✅ |
 | **CDS Metadata Extensions (DDLX)** | ✅ | ✅ |
 | **Service Definitions (SRVD)** | ✅ | ✅ |

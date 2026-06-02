@@ -39,6 +39,7 @@ import {
 } from "./handlers/transport.js";
 import { handleGetAbapgitRepos, handleAbapgitPull } from "./handlers/abapgit.js";
 import { handleRunSelectQuery, handleExecuteAbapSnippet } from "./handlers/query.js";
+import { handleAnalyzeWorkflow } from "./handlers/workflow.js";
 import {
   handleGetAbapKeywordDoc, handleGetAbapClassDoc,
   handleGetModuleBestPractices, handleSearchCleanAbap, handleSearchAbapSyntax,
@@ -125,6 +126,7 @@ export const HANDLER_MAP: Map<string, ToolHandler> = new Map([
   ["abapgit_pull",            handleAbapgitPull],
 
   // QUERY
+  ["analyze_workflow",        handleAnalyzeWorkflow],
   ["run_select_query",        handleRunSelectQuery],
   ["execute_abap_snippet",    handleExecuteAbapSnippet],
 

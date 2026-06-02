@@ -54,7 +54,7 @@ Zugriff auf ein SAP ABAP-System über die ADT REST API — ohne VS Code als Brü
 | DIAGNOSTICS | 4 | Short Dumps, Performance Traces |
 | TRANSPORT | 3 | Transport-Infos, Transport-Inhalte, Transport erstellen |
 | ABAPGIT | 2 | Repos auflisten, Pull ausführen |
-| QUERY | 3 | SELECT-Statements, inaktive Objekte, ABAP-Snippets ausführen |
+| QUERY | 4 | Workflow-Analyse, SELECT-Statements, inaktive Objekte, ABAP-Snippets ausführen |
 | DOCUMENTATION | 5 | ABAP-Keyword-Doku, Klassen-Doku, Modul-Best-Practices, Clean ABAP, ABAP-Syntax |
 | WEBSEARCH | 1 | Websuche in SAP Help, Community & Notes |
 | BATCH | 1 | Parallele Ausführung mehrerer Read-Only-Tools in einem MCP-Call |
@@ -1184,6 +1184,56 @@ Führt einen abapGit Pull für ein Repository durch (importiert Code aus Git ins
 ---
 
 ### QUERY — SQL-Abfragen
+
+#### `analyze_workflow`
+
+Analysiert SAP Business Workflow-Metadaten (klassischer WF / Transaktion SWDD) durch Abfrage der Standard-Workflow-Tabellen via ADT SELECT. **Vollständig read-only — kein `ALLOW_WRITE` erforderlich.**
+
+**Parameter:**
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `mode` | string | | `definitions` (Default), `instances`, `steps`, `agents` |
+| `workflowId` | string | | Workflow-ID, z.B. `WS12300111`. Pflicht für `steps` und `agents`. |
+| `status` | string | | Instanzfilter: `all` (Default), `READY`, `STARTED`, `COMPLETED`, `ERROR` — nur für `instances` |
+| `user` | string | | SAP-User als Agenten-Filter — nur für `instances` |
+| `maxResults` | number | | Max. Ergebnisse (1–100, Default: 20) |
+
+**Modi im Detail:**
+
+| Modus | Tabellen | Beschreibung |
+|-------|----------|--------------|
+| `definitions` | `SWF_FLEX_HEADER`, `SWFTASKI` | Alle Workflow-Templates (flexible WF NW 7.40+ und klassische WS-Tasks) |
+| `instances` | `SWWWIHEAD` | Laufende/beendete Workflow-Instanzen, filterbar nach Status/User/Workflow-ID |
+| `steps` | `SWF_FLEX_STEP`, `SWFSTEPDEF` | Schrittdefinitionen eines bestimmten Workflows |
+| `agents` | `SWF_FLEX_ROLE`, `SWWUSERWI` | Agenten- und Rollenzuweisungen eines Workflows |
+
+**Status-Labels (instances-Modus):**
+- `0` WAITING, `1` READY, `2` SELECTED, `3` STARTED, `4` COMPLETED, `5` CANCELLED, `6` ERROR, `7` EXECUTED
+
+**Beispiele:**
+```
+// Alle Workflow-Definitionen auflisten
+analyze_workflow({ mode: "definitions" })
+
+// Laufende Instanzen für einen bestimmten Workflow
+analyze_workflow({ mode: "instances", workflowId: "WS12300111", status: "STARTED" })
+
+// Schritte eines Workflows anzeigen
+analyze_workflow({ mode: "steps", workflowId: "WS12300111" })
+
+// Agenten-Zuweisungen analysieren
+analyze_workflow({ mode: "agents", workflowId: "WS12300111" })
+
+// Via Intent-Facade (immer erreichbar ohne find_tools)
+SAPDiagnose({ operation: "workflow", args: { mode: "definitions" } })
+```
+
+> **Hinweis:** Workflow-IDs haben das Format `WS<8 Stellen>` (z.B. `WS12300111`). Alle Workflows des Systems sind in Transaktion SWDD sichtbar. Sind Tabellen auf einem System nicht vorhanden, gibt das Tool Warnhinweise aus statt abzubrechen.
+
+> **Systemvoraussetzung:** SAP BC-BMT-WFM (Business Workflow) muss installiert und konfiguriert sein. Auf Systemen ohne Workflow sind die Tabellen leer oder nicht vorhanden.
+
+---
 
 #### `run_select_query`
 
