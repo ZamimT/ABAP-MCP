@@ -16,6 +16,7 @@
 import type { ADTClient } from "abap-adt-api";
 import type { ToolResult } from "../../types.js";
 import { S_AnalyzeWorkflow } from "../../schemas.js";
+import { cfg } from "../../config.js";
 
 function ok(text: string): ToolResult { return { content: [{ type: "text", text }] }; }
 function err(text: string): ToolResult { return { content: [{ type: "text", text }], isError: true }; }
@@ -64,8 +65,8 @@ export async function handleAnalyzeWorkflow(
         ),
         safeQuery(
           client,
-          `SELECT TASKID TASKTYPE DESCRIPT CREATEDBY CREATEDON CHANGEDBY CHANGEDON ` +
-          `FROM SWFTASKI WHERE TASKTYPE = 'WS' UP TO ${max} ROWS`,
+          `SELECT TASKID, TASKTYPE, DESCRIPT, CREATEDBY, CREATEDON, CHANGEDBY, CHANGEDON ` +
+          `FROM SWFTASKI UP TO ${max} ROWS WHERE TASKTYPE = 'WS'`,
         ),
       ]);
 
@@ -109,21 +110,24 @@ export async function handleAnalyzeWorkflow(
       const conditions: string[] = [];
 
       if (p.workflowId) {
-        conditions.push(`TASK = '${p.workflowId.toUpperCase()}'`);
+        // WI_RH_TASK contains the task ID (e.g. WS90000001)
+        conditions.push(`WI_RH_TASK LIKE '%${p.workflowId.toUpperCase()}%'`);
       }
       if (p.status && p.status !== "all") {
-        const statusCodeMap: Record<string, string> = {
-          READY: "1", STARTED: "3", COMPLETED: "4", ERROR: "6",
+        // WI_STAT contains status as text (READY, STARTED, COMPLETED, ERROR, etc.)
+        const statusMap: Record<string, string> = {
+          READY: "READY", STARTED: "STARTED", COMPLETED: "COMPLETED", ERROR: "ERROR",
         };
-        const code = statusCodeMap[p.status] ?? p.status;
-        conditions.push(`WISTA = '${code}'`);
+        const statusValue = statusMap[p.status.toUpperCase()] ?? p.status.toUpperCase();
+        conditions.push(`WI_STAT = '${statusValue}'`);
       }
       if (p.user) {
-        conditions.push(`ACTUAL_AGENT = '${p.user.toUpperCase()}'`);
+        // WI_AAGENT contains the actual agent (user)
+        conditions.push(`WI_AAGENT = '${p.user.toUpperCase()}'`);
       }
 
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
-      const sql = `SELECT * FROM SWWWIHEAD${where} UP TO ${max} ROWS`;
+      const sql = `SELECT WI_ID, WI_RH_TASK, WI_STAT, WI_TEXT, WI_CD, WI_CT, WI_AAGENT, WI_CREATOR, TOP_TASK FROM SWWWIHEAD UP TO ${max} ROWS${where}`;
 
       const result = await safeQuery(client, sql);
       if (result.error) {
@@ -136,14 +140,9 @@ export async function handleAnalyzeWorkflow(
         return ok("No workflow instances found with the given criteria.");
       }
 
-      const enriched = result.rows.map(row => ({
-        ...row,
-        WISTA_LABEL: WI_STATUS[row["WISTA"]] ?? row["WISTA"],
-      }));
-
       return ok(
         `# Workflow Instances (SWWWIHEAD) — ${result.rows.length} found\n\n` +
-        "```json\n" + JSON.stringify(enriched, null, 2) + "\n```",
+        "```json\n" + JSON.stringify(result.rows, null, 2) + "\n```",
       );
     }
 
@@ -154,15 +153,11 @@ export async function handleAnalyzeWorkflow(
       }
       const wfId = p.workflowId.toUpperCase();
 
-      const [flex, classic] = await Promise.all([
-        safeQuery(
-          client,
-          `SELECT * FROM SWF_FLEX_STEP WHERE WFTYPEID = '${wfId}' UP TO ${max} ROWS`,
-        ),
-        safeQuery(
-          client,
-          `SELECT * FROM SWFSTEPDEF WHERE FLOWID = '${wfId}' UP TO ${max} ROWS`,
-        ),
+      const [flex, classic, contDef] = await Promise.all([
+        safeQuery(client, `SELECT * FROM SWF_FLEX_STEP UP TO ${max} ROWS WHERE WFTYPEID = '${wfId}'`),
+        safeQuery(client, `SELECT * FROM SWFSTEPDEF UP TO ${max} ROWS WHERE FLOWID = '${wfId}'`),
+        // SWFCONTDEF: container elements of a SWDD workflow (data flowing between steps)
+        safeQuery(client, `SELECT ELEMENT, CDTYPE, EDITMODE, MANDATORY FROM SWFCONTDEF UP TO ${max} ROWS WHERE TASKID = '${wfId}'`),
       ]);
 
       const parts: string[] = [`# Workflow Step Definitions for ${wfId}\n`];
@@ -174,7 +169,7 @@ export async function handleAnalyzeWorkflow(
         parts.push(
           flex.error
             ? `## SWF_FLEX_STEP\n⚠️ ${flex.error}`
-            : `## SWF_FLEX_STEP\n_No steps found for ${wfId}._`,
+            : `## SWF_FLEX_STEP\n_No steps found for ${wfId} (only relevant for Flexible Workflow)._`,
         );
       }
 
@@ -189,10 +184,40 @@ export async function handleAnalyzeWorkflow(
         );
       }
 
-      if (flex.rows.length === 0 && classic.rows.length === 0) {
+      // SWDD container: always useful regardless of WF type
+      if (contDef.rows.length > 0) {
+        parts.push(`\n## SWDD Container Elements (SWFCONTDEF) — ${contDef.rows.length} elements\n`);
         parts.push(
-          `\n💡 No step definitions found for '${wfId}'. ` +
-          "Verify the workflow ID in SWDD. IDs have the format WS<8 digits> (e.g. WS12300111).",
+          "_Container elements are the data fields passed between workflow steps (import/export/in-out)._\n",
+        );
+        parts.push("```json\n" + JSON.stringify(contDef.rows, null, 2) + "\n```");
+      } else if (!contDef.error) {
+        parts.push(`\n## SWDD Container (SWFCONTDEF)\n_No container elements found for ${wfId}._`);
+      }
+
+      // Deep SWDD analysis via execute_abap_snippet when execution is enabled.
+      // Classic SWDD step/node structure is not queryable via plain SQL — the compiled
+      // workflow graph lives in internal WF runtime tables. The snippet reads SWFTASKI
+      // (task header) and SWFCONTDEF (container) to give meaningful output while
+      // gracefully noting that the visual step graph requires SWDD.
+      if (cfg.allowWrite && cfg.allowExecute) {
+        parts.push("\n## SWDD Deep Analysis (execute_abap_snippet)\n");
+        try {
+          // Dynamic import avoids circular dependency: handler-map → workflow → handler-map
+          const { handleExecuteAbapSnippet } = await import("./query.js");
+          const snippet = buildSwddStepsSnippet(wfId);
+          const result = await handleExecuteAbapSnippet(client, { source: snippet, timeout: 15 });
+          const text = result.content[0]?.type === "text" ? result.content[0].text : String(result.content);
+          parts.push(text);
+        } catch (e) {
+          parts.push(`⚠️ execute_abap_snippet failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } else {
+        parts.push(
+          "\n> **SWDD step graph**: Classic SWDD step/node structure is compiled into an internal " +
+          "WF runtime format and cannot be read via direct SQL. " +
+          "Enable `ALLOW_WRITE=true` + `ALLOW_EXECUTE=true` for ABAP-snippet-based deep analysis. " +
+          "Alternative: transaction **SWDD** for visual step display, or **SWI14** for task usage analysis.",
         );
       }
 
@@ -209,12 +234,12 @@ export async function handleAnalyzeWorkflow(
       const [roles, userWi] = await Promise.all([
         safeQuery(
           client,
-          `SELECT * FROM SWF_FLEX_ROLE WHERE WFTYPEID = '${wfId}' UP TO ${max} ROWS`,
+          `SELECT * FROM SWF_FLEX_ROLE UP TO ${max} ROWS WHERE WFTYPEID = '${wfId}'`,
         ),
         safeQuery(
           client,
-          `SELECT WIID TASK ACTUAL_AGENT FROM SWWUSERWI ` +
-          `WHERE TASK LIKE '${wfId.substring(0, 12)}%' UP TO ${max} ROWS`,
+          `SELECT WI_ID, TASK_OBJ, USER_ID FROM SWWUSERWI UP TO ${max} ROWS ` +
+          `WHERE TASK_OBJ LIKE '%${wfId.substring(0, 10)}%'`,
         ),
       ]);
 
@@ -255,4 +280,56 @@ export async function handleAnalyzeWorkflow(
     default:
       return err(`❌ Unknown mode: ${String((p as { mode?: unknown }).mode)}`);
   }
+}
+
+/**
+ * Builds an ABAP snippet that reads SWDD workflow metadata at runtime.
+ * Uses only tables and field names known to exist on all SAP systems with
+ * classic Business Workflow installed (NW 7.0+):
+ *   SWFTASKI   — task header (TASKID, TASKTYPE, DESCRIPT, CREATEDBY, CREATEDON, …)
+ *   SWFCONTDEF — container element definitions (ELEMENT, CDTYPE, EDITMODE, MANDATORY)
+ *
+ * Intentionally avoids function module calls with uncertain type interfaces so the
+ * snippet passes the syntax check on all target systems.
+ */
+function buildSwddStepsSnippet(wfId: string): string {
+  return `REPORT ztest.
+DATA lv_id TYPE swf_task_id VALUE '${wfId}'.
+WRITE: / '=== SWDD Workflow Detail:', lv_id.
+WRITE: / ''.
+
+" ---- Task header ----
+SELECT SINGLE taskid tasktype descript createdby createdon changedby changedon
+  FROM swftaski INTO @DATA(ls) WHERE taskid = @lv_id.
+IF sy-subrc <> 0.
+  WRITE: / 'ERROR: Workflow', lv_id, 'not found in SWFTASKI.'.
+  RETURN.
+ENDIF.
+WRITE: / 'Description :', ls-descript.
+WRITE: / 'Task Type   :', ls-tasktype.
+WRITE: / 'Created by  :', ls-createdby, 'on', ls-createdon.
+WRITE: / 'Changed by  :', ls-changedby, 'on', ls-changedon.
+WRITE: / ''.
+
+" ---- Container elements ----
+" SWFCONTDEF holds the data elements (import/export/in-out) shared between steps.
+WRITE: / '=== Container (SWFCONTDEF):'.
+SELECT element cdtype editmode mandatory
+  FROM swfcontdef INTO TABLE @DATA(lt_c)
+  WHERE taskid = @lv_id UP TO 50 ROWS.
+IF sy-subrc = 0.
+  LOOP AT lt_c INTO DATA(lc).
+    WRITE: / '  [', lc-element, ']  type:', lc-cdtype,
+             '  edit:', lc-editmode, '  mand:', lc-mandatory.
+  ENDLOOP.
+ELSE.
+  WRITE: / '  (no container elements)'.
+ENDIF.
+WRITE: / ''.
+
+" ---- Information on step-level detail ----
+WRITE: / 'Note: The compiled SWDD step/node graph is not accessible via plain SQL.'.
+WRITE: / 'For visual step display: transaction SWDD (enter WF-ID above).'.
+WRITE: / 'For task usage in running instances: analyze_workflow(mode=instances,workflowId=ID).'.
+WRITE: / 'For who performed which step: check SWWWIHEAD filtered by task LIKE TS%.'.`;
 }
