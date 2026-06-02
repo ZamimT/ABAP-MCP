@@ -407,13 +407,14 @@ export const S_IntentDiagnose = z.object({
 
 // --- WORKFLOW ANALYSIS ---
 export const S_AnalyzeWorkflow = z.object({
-  mode: z.enum(["definitions", "instances", "steps", "agents"]).default("definitions")
+  mode: z.enum(["definitions", "instances", "steps", "agents", "graph"]).default("definitions")
     .describe(
       "What to analyze: " +
       "'definitions' = list workflow templates (SWF_FLEX_HEADER + SWFTASKI), " +
       "'instances' = list running/completed workflow instances (SWWWIHEAD), " +
       "'steps' = show step definitions for one workflow (needs workflowId), " +
-      "'agents' = show agent/role assignments for one workflow (needs workflowId)"
+      "'agents' = show agent/role assignments for one workflow (needs workflowId), " +
+      "'graph' = return the complete SWDD step-by-step graph with nodes, edges, and step details (needs workflowId)"
     ),
   workflowId: z.string().optional()
     .describe("Workflow or task ID, e.g. 'WS12300111' (Workflow) or 'TS12300120' (Task). Required for modes 'steps' and 'agents'."),

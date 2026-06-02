@@ -47,6 +47,49 @@ const WI_STATUS: Record<string, string> = {
   "7": "EXECUTED",
 };
 
+/** Node type mapping for SWD_NODES.NODETYPE */
+const NODE_TYPE_MAP: Record<string, string> = {
+  "S": "Start",
+  "E": "End",
+  "A": "Activity",
+  "C": "Condition",
+  "D": "Decision",
+  "F": "Fork",
+  "J": "Join",
+  "L": "Loop Start",
+  "M": "Loop End",
+  "W": "Wait",
+  "B": "Block Start",
+  "N": "Block End",
+  "U": "User Decision",
+  "X": "Exception Handler",
+  "T": "Terminating Event",
+  "P": "Parallel Section",
+  "R": "Reference",
+  "G": "Go To",
+  "H": "Ad-Hoc Anchor",
+  "K": "Container Operation",
+  "O": "Local Event",
+  "Q": "Send Mail",
+  "V": "Process Control",
+  "Y": "Web Activity",
+  "Z": "XML Message",
+};
+
+/** Line type mapping for SWD_LINES.LINE_TYPE */
+const LINE_TYPE_MAP: Record<string, string> = {
+  "N": "Normal",
+  "C": "Condition True",
+  "F": "Condition False",
+  "E": "Exception",
+  "D": "Default",
+  "R": "Return",
+  "T": "Timeout",
+  "X": "Cancel",
+  "O": "Outcome",
+  "L": "Loop",
+};
+
 export async function handleAnalyzeWorkflow(
   client: ADTClient,
   args: Record<string, unknown>,
@@ -273,6 +316,199 @@ export async function handleAnalyzeWorkflow(
           "Check in SWDD under step → Agent assignment, or use mode='instances' to see who worked on actual instances.",
         );
       }
+
+      return ok(parts.join("\n"));
+    }
+
+    // ── GRAPH ───────────────────────────────────────────────────────────────
+    case "graph": {
+      if (!p.workflowId) {
+        return err("❌ workflowId is required for mode='graph'. Example: workflowId='WS90000001'");
+      }
+      const wfId = p.workflowId.toUpperCase();
+
+      // Query all relevant tables in parallel for the workflow graph
+      const [header, nodes, lines, steps, container, nodeTexts] = await Promise.all([
+        // Workflow header (description, creator, etc.)
+        safeQuery(
+          client,
+          `SELECT TASKID, TASKTYPE, DESCRIPT, CREATEDBY, CREATEDON, CHANGEDBY, CHANGEDON ` +
+          `FROM SWFTASKI WHERE TASKID = '${wfId}'`,
+        ),
+        // Nodes (the graph vertices)
+        safeQuery(
+          client,
+          `SELECT WFD_ID, VERSION, NODEID, NODETYPE, BLOCKID, PAR_BLCKID, NEST_LEVEL, ` +
+          `CONDIT_ID, CONT_CMD, EVT_TYPE, EVT_OTYPE, STEP_HIDE ` +
+          `FROM SWD_NODES WHERE WFD_ID = '${wfId}' AND EXETYP = 'P' ` +
+          `ORDER BY NODEID`,
+        ),
+        // Lines (the graph edges: predecessor → successor)
+        safeQuery(
+          client,
+          `SELECT WFD_ID, VERSION, PRED_NODE, SUCC_NODE, LINE_TYPE, RETURNCODE ` +
+          `FROM SWD_LINES WHERE WFD_ID = '${wfId}' AND EXETYP = 'P' ` +
+          `ORDER BY PRED_NODE, SUCC_NODE`,
+        ),
+        // Steps (detailed step information: task, agent role, deadlines)
+        safeQuery(
+          client,
+          `SELECT WFD_ID, VERSION, NODEID, TASK, ACT_ROLE, PRIORITY, STEP_ASYNC, ` +
+          `DIAL_FLAG, CLASSIFICATION ` +
+          `FROM SWD_STEPS WHERE WFD_ID = '${wfId}' AND EXETYP = 'P' ` +
+          `ORDER BY NODEID`,
+        ),
+        // Container elements (data flowing between steps)
+        safeQuery(
+          client,
+          `SELECT ELEMENT, REFTYPE, REFSTRUCT, REFFIELD, REFOBJTYPE, ELEMTYPE, TABELEM ` +
+          `FROM SWD_WFCONT WHERE WFD_ID = '${wfId}' AND EXETYP = 'P' UP TO ${max} ROWS`,
+        ),
+        // Node texts (descriptions) from SWD_NODET if available
+        safeQuery(
+          client,
+          `SELECT NODEID, DESCRIPT FROM SWD_NODET WHERE WFD_ID = '${wfId}' AND EXETYP = 'P' ` +
+          `AND LANGU = 'D' UP TO ${max} ROWS`,
+        ),
+      ]);
+
+      // Build the graph response
+      const parts: string[] = [`# SWDD Workflow Graph: ${wfId}\n`];
+
+      // Header info
+      if (header.rows.length > 0) {
+        const h = header.rows[0];
+        parts.push(`## Workflow Definition\n`);
+        parts.push(`- **ID**: ${h.TASKID || wfId}`);
+        parts.push(`- **Description**: ${h.DESCRIPT || "(no description)"}`);
+        parts.push(`- **Type**: ${h.TASKTYPE || "WS"}`);
+        parts.push(`- **Created by**: ${h.CREATEDBY || "?"} on ${h.CREATEDON || "?"}`);
+        parts.push(`- **Changed by**: ${h.CHANGEDBY || "?"} on ${h.CHANGEDON || "?"}\n`);
+      } else if (header.error) {
+        parts.push(`## Workflow Header\n⚠️ Could not read SWFTASKI: ${header.error}\n`);
+      } else {
+        parts.push(`## Workflow Header\n_Workflow '${wfId}' not found in SWFTASKI._\n`);
+      }
+
+      // Build node description map
+      const nodeDescMap: Record<string, string> = {};
+      if (nodeTexts.rows.length > 0) {
+        for (const row of nodeTexts.rows) {
+          if (row.NODEID && row.DESCRIPT) {
+            nodeDescMap[row.NODEID] = row.DESCRIPT;
+          }
+        }
+      }
+
+      // Build step info map (NODEID → step details)
+      const stepMap: Record<string, Record<string, string>> = {};
+      if (steps.rows.length > 0) {
+        for (const row of steps.rows) {
+          if (row.NODEID) {
+            stepMap[row.NODEID] = row;
+          }
+        }
+      }
+
+      // Nodes section
+      if (nodes.rows.length > 0) {
+        parts.push(`## Nodes (${nodes.rows.length} total)\n`);
+        parts.push("| NodeID | Type | Description | Task | Block | Level |");
+        parts.push("|--------|------|-------------|------|-------|-------|");
+        for (const n of nodes.rows) {
+          const nodeType = NODE_TYPE_MAP[n.NODETYPE] || n.NODETYPE || "?";
+          const desc = nodeDescMap[n.NODEID] || stepMap[n.NODEID]?.TASK || "";
+          const task = stepMap[n.NODEID]?.TASK || "";
+          parts.push(
+            `| ${n.NODEID} | ${nodeType} | ${desc.substring(0, 30)} | ${task} | ${n.BLOCKID || "-"} | ${n.NEST_LEVEL || "0"} |`,
+          );
+        }
+        parts.push("");
+      } else {
+        parts.push(
+          nodes.error
+            ? `## Nodes\n⚠️ Could not read SWD_NODES: ${nodes.error}\n`
+            : `## Nodes\n_No nodes found for ${wfId}._\n`,
+        );
+      }
+
+      // Edges section
+      if (lines.rows.length > 0) {
+        parts.push(`## Edges (${lines.rows.length} connections)\n`);
+        parts.push("| From | To | Type | Condition/Returncode |");
+        parts.push("|------|-----|------|---------------------|");
+        for (const l of lines.rows) {
+          const lineType = LINE_TYPE_MAP[l.LINE_TYPE] || l.LINE_TYPE || "?";
+          const rc = l.RETURNCODE ? l.RETURNCODE.substring(0, 30) : "-";
+          parts.push(`| ${l.PRED_NODE} | ${l.SUCC_NODE} | ${lineType} | ${rc} |`);
+        }
+        parts.push("");
+      } else {
+        parts.push(
+          lines.error
+            ? `## Edges\n⚠️ Could not read SWD_LINES: ${lines.error}\n`
+            : `## Edges\n_No edges found for ${wfId}._\n`,
+        );
+      }
+
+      // Steps detail section
+      if (steps.rows.length > 0) {
+        parts.push(`## Step Details (${steps.rows.length} steps)\n`);
+        parts.push("```json");
+        parts.push(JSON.stringify(steps.rows, null, 2));
+        parts.push("```\n");
+      }
+
+      // Container section
+      if (container.rows.length > 0) {
+        parts.push(`## Container Elements (${container.rows.length} elements)\n`);
+        parts.push("_Data elements passed between workflow steps:_\n");
+        parts.push("| Element | Type | Reference |");
+        parts.push("|---------|------|-----------|");
+        for (const c of container.rows) {
+          const ref = c.REFOBJTYPE || c.REFSTRUCT || c.REFFIELD || "-";
+          const elemType = c.ELEMTYPE === "I" ? "Import" : c.ELEMTYPE === "E" ? "Export" : c.ELEMTYPE || "?";
+          parts.push(`| ${c.ELEMENT} | ${elemType} | ${ref} |`);
+        }
+        parts.push("");
+      }
+
+      // Mermaid diagram
+      if (nodes.rows.length > 0 && lines.rows.length > 0) {
+        parts.push(`## Mermaid Diagram\n`);
+        parts.push("```mermaid");
+        parts.push("flowchart TD");
+        // Define nodes
+        for (const n of nodes.rows) {
+          const nodeType = n.NODETYPE || "?";
+          const desc = nodeDescMap[n.NODEID] || stepMap[n.NODEID]?.TASK || `Node ${n.NODEID}`;
+          const shortDesc = desc.substring(0, 20).replace(/"/g, "'");
+          // Use different shapes for different node types
+          if (nodeType === "S") {
+            parts.push(`    N${n.NODEID}(("${shortDesc}"))`); // Circle for Start
+          } else if (nodeType === "E") {
+            parts.push(`    N${n.NODEID}(("${shortDesc}"))`); // Circle for End
+          } else if (nodeType === "C" || nodeType === "D") {
+            parts.push(`    N${n.NODEID}{{"${shortDesc}"}}`); // Diamond for Condition/Decision
+          } else if (nodeType === "F") {
+            parts.push(`    N${n.NODEID}[/"${shortDesc}"/]`); // Parallelogram for Fork
+          } else {
+            parts.push(`    N${n.NODEID}["${shortDesc}"]`); // Rectangle for Activity
+          }
+        }
+        // Define edges
+        for (const l of lines.rows) {
+          const label = l.RETURNCODE ? `|${l.RETURNCODE.substring(0, 10)}|` : "";
+          parts.push(`    N${l.PRED_NODE} -->${label} N${l.SUCC_NODE}`);
+        }
+        parts.push("```\n");
+      }
+
+      // Usage hint
+      parts.push(
+        "> 💡 **Tip**: Use the Mermaid diagram above to visualize the workflow. " +
+        "For the full SWDD experience, open transaction **SWDD** in SAP GUI and enter the workflow ID.",
+      );
 
       return ok(parts.join("\n"));
     }

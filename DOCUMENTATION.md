@@ -1193,8 +1193,8 @@ Analysiert SAP Business Workflow-Metadaten (klassischer WF / Transaktion SWDD) d
 
 | Parameter | Typ | Pflicht | Beschreibung |
 |-----------|-----|---------|--------------|
-| `mode` | string | | `definitions` (Default), `instances`, `steps`, `agents` |
-| `workflowId` | string | | Workflow-ID, z.B. `WS12300111`. Pflicht für `steps` und `agents`. |
+| `mode` | string | | `definitions` (Default), `instances`, `steps`, `agents`, `graph` |
+| `workflowId` | string | | Workflow-ID, z.B. `WS12300111`. Pflicht für `steps`, `agents` und `graph`. |
 | `status` | string | | Instanzfilter: `all` (Default), `READY`, `STARTED`, `COMPLETED`, `ERROR` — nur für `instances` |
 | `user` | string | | SAP-User als Agenten-Filter — nur für `instances` |
 | `maxResults` | number | | Max. Ergebnisse (1–100, Default: 20) |
@@ -1207,6 +1207,7 @@ Analysiert SAP Business Workflow-Metadaten (klassischer WF / Transaktion SWDD) d
 | `instances` | `SWWWIHEAD` | Laufende/beendete Workflow-Instanzen, filterbar nach Status/User/Workflow-ID |
 | `steps` | `SWF_FLEX_STEP`, `SWFSTEPDEF` | Schrittdefinitionen eines bestimmten Workflows |
 | `agents` | `SWF_FLEX_ROLE`, `SWWUSERWI` | Agenten- und Rollenzuweisungen eines Workflows |
+| `graph` | `SWD_NODES`, `SWD_LINES`, `SWD_STEPS`, `SWD_WFCONT` | **SWDD Schritt-zu-Schritt-Graph** mit Knoten, Kanten, Step-Details und Mermaid-Diagramm |
 
 **Status-Labels (instances-Modus):**
 - `0` WAITING, `1` READY, `2` SELECTED, `3` STARTED, `4` COMPLETED, `5` CANCELLED, `6` ERROR, `7` EXECUTED
@@ -1225,9 +1226,30 @@ analyze_workflow({ mode: "steps", workflowId: "WS12300111" })
 // Agenten-Zuweisungen analysieren
 analyze_workflow({ mode: "agents", workflowId: "WS12300111" })
 
+// SWDD Schritt-zu-Schritt-Graph mit Mermaid-Diagramm
+analyze_workflow({ mode: "graph", workflowId: "WS12300111" })
+
 // Via Intent-Facade (immer erreichbar ohne find_tools)
 SAPDiagnose({ operation: "workflow", args: { mode: "definitions" } })
+SAPDiagnose({ operation: "workflow", args: { mode: "graph", workflowId: "WS12300111" } })
 ```
+
+**Graph-Modus Ausgabe:**
+
+Der `graph`-Modus liefert eine vollständige Darstellung des SWDD-Workflow-Graphen:
+
+- **Workflow Definition**: ID, Beschreibung, Ersteller, Änderungsdatum
+- **Nodes-Tabelle**: Alle Knoten mit NodeID, Typ (Start/End/Activity/Condition/Fork/...), Beschreibung, Task, Block-ID, Verschachtelungsebene
+- **Edges-Tabelle**: Alle Verbindungen mit Vorgänger, Nachfolger, Linientyp, Bedingung/Returncode
+- **Step Details**: JSON mit detaillierten Step-Informationen (Task, Agent-Rolle, Priorität, etc.)
+- **Container Elements**: Datenelemente die zwischen Steps fließen
+- **Mermaid-Diagramm**: Visualisierbarer Flowchart des Workflows
+
+**Node-Typen:**
+`S`=Start, `E`=End, `A`=Activity, `C`=Condition, `D`=Decision, `F`=Fork, `J`=Join, `L`=Loop Start, `M`=Loop End, `W`=Wait, `U`=User Decision, `X`=Exception Handler, etc.
+
+**Line-Typen:**
+`N`=Normal, `C`=Condition True, `F`=Condition False, `E`=Exception, `D`=Default, `R`=Return, `T`=Timeout, `O`=Outcome
 
 > **Hinweis:** Workflow-IDs haben das Format `WS<8 Stellen>` (z.B. `WS12300111`). Alle Workflows des Systems sind in Transaktion SWDD sichtbar. Sind Tabellen auf einem System nicht vorhanden, gibt das Tool Warnhinweise aus statt abzubrechen.
 
