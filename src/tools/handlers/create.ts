@@ -29,9 +29,43 @@ export async function handleCreateAbapClass(client: ADTClient, args: Record<stri
   assertWriteEnabled();
   const p = S_CreateClass.parse(args);
   assertPackageAllowed(p.devClass);
-  assertCustomerNamespace(p.name, ["ZCL_", "YCL_"]);
+  assertCustomerNamespace(p.name, ["ZCL_", "YCL_", "ZBP_", "YBP_"]);
   const n = p.name.toUpperCase();
   const url = `${ADT_CLASSES}/${n.toLowerCase()}`;
+  const classCategory = p.classCategory ?? "generalObjectType";
+  const responsible = client.httpClient.username.toUpperCase();
+
+  // For behaviorPool classes, use a direct HTTP POST with class:category attribute.
+  // client.createObject() does not support setting the class category.
+  if (classCategory === "behaviorPool") {
+    const body = [
+      `<?xml version="1.0" encoding="UTF-8"?>`,
+      `<class:abapClass xmlns:class="http://www.sap.com/adt/oo/classes"`,
+      `  xmlns:adtcore="http://www.sap.com/adt/core"`,
+      `  adtcore:description="${encXml(p.description)}"`,
+      `  adtcore:name="${n}" adtcore:type="CLAS/OC"`,
+      `  adtcore:language="EN" adtcore:masterLanguage="EN"`,
+      `  adtcore:responsible="${responsible}"`,
+      `  class:category="behaviorPool"`,
+      `  class:final="true" class:abstract="true" class:visibility="public">`,
+      `  <adtcore:packageRef adtcore:name="${p.devClass}"/>`,
+      `</class:abapClass>`,
+    ].join("\n");
+    const qs: Record<string, string> = {};
+    if (p.transport) qs.corrNr = p.transport;
+    try {
+      await client.httpClient.request(ADT_CLASSES, { method: "POST", headers: { "Content-Type": "application/*" }, qs, body });
+    } catch (createErr) {
+      const errMsg = createErr instanceof Error ? createErr.message : String(createErr);
+      if (errMsg.includes("already exist") || errMsg.includes("SADT_RESOURCE/1")) throw createErr;
+      try {
+        await client.objectStructure(url);
+        return ok(`✅ Class '${n}' created as behaviorPool (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})\nURI: ${url}\n\nNext steps:\n  read_abap_source → write_abap_source`);
+      } catch { throw createErr; }
+    }
+    return ok(`✅ Class '${n}' created as behaviorPool\nURI: ${url}\n\nNext steps:\n  read_abap_source → write_abap_source`);
+  }
+
   try {
     await client.createObject("CLAS/OC", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, p.transport || undefined);
   } catch (createErr) {

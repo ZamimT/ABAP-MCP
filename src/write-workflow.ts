@@ -16,6 +16,21 @@ export function formatActivationMessages(messages: ActivationResultMessage[]): s
   );
 }
 
+/** For ABAP class includes (e.g. /includes/definitions), the lock must be on the parent class.
+ *  Returns the URL that should be used for lock/unlock operations. */
+function getLockUrl(objectUrl: string): string {
+  const includesIdx = objectUrl.indexOf("/includes/");
+  if (includesIdx !== -1) return objectUrl.substring(0, includesIdx);
+  return objectUrl;
+}
+
+/** For ABAP class includes, the source is written directly to the include URL (no /source/main suffix).
+ *  For all other objects, append /source/main if not already present. */
+function getSourceUrl(objectUrl: string): string {
+  if (objectUrl.includes("/includes/")) return objectUrl;
+  return objectUrl.endsWith("/source/main") ? objectUrl : `${objectUrl}/source/main`;
+}
+
 export async function writeWorkflow(
   client: ADTClient,
   objectUrl: string,
@@ -26,16 +41,17 @@ export async function writeWorkflow(
   mainProgram?: string,
   onProgress?: (msg: string) => Promise<void>,
 ): Promise<{ success: boolean; log: string[]; syntaxErrors?: string[] }> {
+  const lockUrl = getLockUrl(objectUrl);
   return withWriteLock(() => withStatefulSession(client, async () => {
     const log: string[] = [];
     let lockHandle: string | undefined;
     try {
       // Phase 1: lock → write → unlock (stateful session needed for lock/write)
-      log.push(`🔒 Locking: ${objectUrl}`);
+      log.push(`🔒 Locking: ${lockUrl}`);
       // Direct lock — withStatefulSession already manages the session
       let lockResult: { LOCK_HANDLE?: string } | undefined;
       try {
-        lockResult = await client.lock(objectUrl);
+        lockResult = await client.lock(lockUrl);
       } catch (lockErr) {
         const errMsg = lockErr instanceof Error ? lockErr.message : String(lockErr);
         // CTS_WBO_API/19 or /20 = "Object already locked in request X of user Y"
@@ -55,7 +71,7 @@ export async function writeWorkflow(
 
           // Helper: attempt a single lock POST with a given corrNr
           const tryLockWithCorrNr = async (corrNr: string): Promise<string | undefined> => {
-            const lockResp = await client.httpClient.request(objectUrl, {
+            const lockResp = await client.httpClient.request(lockUrl, {
               method: "POST",
               headers: {
                 Accept: "application/*,application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.lock.result",
@@ -81,7 +97,7 @@ export async function writeWorkflow(
           // (ADT sometimes requires the task number, not the workbench request number)
           if (!handle) {
             try {
-              const info = await client.transportInfo(objectUrl, "");
+              const info = await client.transportInfo(lockUrl, "");
               const tasks: Array<{ TRKORR: string }> = (info as { LOCKS?: { TASKS?: Array<{ TRKORR: string }> } })?.LOCKS?.TASKS ?? [];
               for (const task of tasks) {
                 try {
@@ -117,7 +133,7 @@ export async function writeWorkflow(
       await onProgress?.("🔒 Lock acquired");
 
       log.push(`✏️  Writing source code (${source.length} characters)...`);
-      const sourceUrl = objectUrl.endsWith("/source/main") ? objectUrl : `${objectUrl}/source/main`;
+      const sourceUrl = getSourceUrl(objectUrl);
       // setObjectSource may fail if the lock was acquired without corrNr (same-user re-lock)
       // but the object is actually in a different transport than the one passed by the caller.
       // In that case, extract the correct transport from the error and retry.
@@ -171,7 +187,7 @@ export async function writeWorkflow(
       log.push("🔓 Releasing lock + 🔍 Syntax check (parallel)...");
       const syntaxContext = await resolveSyntaxContext(client, objectUrl, mainProgram, log);
       const [, syntaxRes] = await Promise.all([
-        client.unLock(objectUrl, lockHandle).catch((e) => {
+        client.unLock(lockUrl, lockHandle).catch((e) => {
           log.push(`⚠️ Unlock failed: ${e instanceof Error ? e.message : String(e)}`);
         }),
         !skipCheck

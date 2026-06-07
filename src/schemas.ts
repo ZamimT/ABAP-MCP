@@ -81,11 +81,13 @@ export const S_CreateProgram = z.object({
   programType: z.enum(["P", "I"]).default("P").optional().describe("P = Executable (Report), I = Include (default: P)"),
 });
 export const S_CreateClass = z.object({
-  name:        z.string().min(1).max(30).describe("Class name, must start with ZCL_ or YCL_"),
-  description: z.string().max(40).describe("Short description"),
-  devClass:    z.string().describe("Package"),
-  transport:   z.string().optional(),
-  superClass:  z.string().optional().describe("Super class, e.g. CL_ABAP_UNIT_ASSERT"),
+  name:          z.string().min(1).max(30).describe("Class name, must start with ZCL_ or YCL_"),
+  description:   z.string().max(40).describe("Short description"),
+  devClass:      z.string().describe("Package"),
+  transport:     z.string().optional(),
+  superClass:    z.string().optional().describe("Super class, e.g. CL_ABAP_UNIT_ASSERT"),
+  classCategory: z.enum(["generalObjectType", "behaviorPool"]).default("generalObjectType").optional()
+    .describe("Class category: 'generalObjectType' (default) or 'behaviorPool' for RAP behavior pool classes (ZBP_*)"),
 });
 export const S_CreateInterface = z.object({
   name:        z.string().min(1).max(30).describe("Interface name, must start with ZIF_ or YIF_"),

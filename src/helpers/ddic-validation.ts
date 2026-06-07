@@ -58,9 +58,14 @@ export async function validateDdicReferencesInternal(client: ADTClient, source: 
     }
   }
 
+  // Strip RAP behavior references (e.g. FOR ACTION entity~method, FOR MODIFY entity~method)
+  // before applying the tilde pattern to avoid false DDIC positives.
+  const rapBehaviorPattern = /\bFOR\s+(?:ACTION|MODIFY|READ|LOCK|NUMBERING|AUTHORIZATION|GLOBAL|INSTANCE)\s+\w+~\w+/gi;
+  const cleanSourceForTilde = cleanSource.replace(rapBehaviorPattern, '');
+
   const tildePattern = /\b([A-Z][A-Z0-9_]{2,30})~([A-Z][A-Z0-9_]{1,30})\b/gi;
   let tm: RegExpExecArray | null;
-  while ((tm = tildePattern.exec(cleanSource)) !== null) {
+  while ((tm = tildePattern.exec(cleanSourceForTilde)) !== null) {
     addField(tm[1].toUpperCase(), tm[2].toUpperCase());
   }
 
