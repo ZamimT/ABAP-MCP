@@ -4,6 +4,7 @@
  */
 
 import type { ADTClient, ActivationResultMessage } from "abap-adt-api";
+import { isAdtError } from "abap-adt-api";
 import { withWriteLock, withStatefulSession } from "./concurrency.js";
 import { resolveMainProgram, resolveSyntaxContext } from "./helpers/resolve.js";
 import { validateDdicReferencesInternal } from "./helpers/ddic-validation.js";
@@ -37,10 +38,15 @@ export async function writeWorkflow(
         lockResult = await client.lock(objectUrl);
       } catch (lockErr) {
         const errMsg = lockErr instanceof Error ? lockErr.message : String(lockErr);
-        // CTS_WBO_API/19 = "Object already locked in request X of user Y"
-        // When the same user has the object locked in a transport task, retry with corrNr
-        // so ADT returns the existing lock handle instead of rejecting the request.
-        if (errMsg.includes("CTS_WBO_API")) {
+        // CTS_WBO_API/19 or /20 = "Object already locked in request X of user Y"
+        // The T100 key is stored in AdtErrorException.properties, NOT in .message.
+        // Check both the message text and the ADT properties for the lock error.
+        const isLockConflict = errMsg.includes("already locked") ||
+          (isAdtError(lockErr) && (
+            lockErr.properties["T100KEY-ID"] === "CTS_WBO_API" ||
+            errMsg.includes("CTS_WBO_API")
+          ));
+        if (isLockConflict) {
           // Extract the transport that actually holds the lock from the error message
           // e.g. "already locked in request S4PK912551 of user ..."
           const lockedInMatch = errMsg.match(/locked in request (\w+)/i);
