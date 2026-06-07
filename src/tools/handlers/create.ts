@@ -38,9 +38,13 @@ export async function handleCreateAbapClass(client: ADTClient, args: Record<stri
     // ADT sometimes returns a non-2xx response even when the class was successfully created
     // (e.g. HTTP 500 with a redirect or warning body). Verify by checking if the object exists.
     const errMsg = createErr instanceof Error ? createErr.message : String(createErr);
+    // "already exist" / SADT_RESOURCE/1 = genuine duplicate — propagate, don't treat as false-success.
+    if (errMsg.includes("already exist") || errMsg.includes("SADT_RESOURCE/1")) {
+      throw createErr;
+    }
     try {
       await client.objectStructure(url);
-      // Object exists → creation succeeded despite the error response
+      // Object exists → creation succeeded despite the error response (e.g. HTTP 500 + warning body)
       return ok(
         `✅ Class '${n}' created (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})\n` +
         `URI: ${url}\n\nNext steps:\n  read_abap_source → write_abap_source`
@@ -123,6 +127,10 @@ export async function handleCreateDatabaseTable(client: ADTClient, args: Record<
   } catch (createErr) {
     // Verify whether the table was actually created despite a non-2xx response
     const errMsg = createErr instanceof Error ? createErr.message : String(createErr);
+    // "already exist" / SADT_RESOURCE/1 = genuine duplicate — propagate, don't treat as false-success.
+    if (errMsg.includes("already exist") || errMsg.includes("SADT_RESOURCE/1")) {
+      throw createErr;
+    }
     try {
       await client.objectStructure(url);
       return ok(`✅ Table '${n}' created (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})\nURI: ${url}`);
