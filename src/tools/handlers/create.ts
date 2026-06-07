@@ -85,8 +85,46 @@ export async function handleCreateCdsView(client: ADTClient, args: Record<string
   assertPackageAllowed(p.devClass);
   assertCustomerNamespace(p.name, ["Z", "Y"]);
   const n = p.name.toUpperCase();
-  await client.createObject("DDLS/DF", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, p.transport || undefined);
   const url = `${ADT_DDIC_DDL_SOURCES}/${n.toLowerCase()}`;
+  const responsible = client.httpClient.username.toUpperCase();
+
+  // abap-adt-api's createObject does not pass corrNr correctly for DDLS objects.
+  // Use direct HTTP POST (same pattern as handleCreateDatabaseTable) to guarantee corrNr is included.
+  const body = [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<blue:blueSource xmlns:blue="http://www.sap.com/wbobj/blue"`,
+    `  xmlns:adtcore="http://www.sap.com/adt/core"`,
+    `  adtcore:description="${encXml(p.description)}"`,
+    `  adtcore:name="${n}" adtcore:type="DDLS/DF"`,
+    `  adtcore:language="EN" adtcore:masterLanguage="EN"`,
+    `  adtcore:responsible="${responsible}">`,
+    `  <adtcore:packageRef adtcore:name="${p.devClass}"/>`,
+    `</blue:blueSource>`,
+  ].join("\n");
+
+  const qs: Record<string, string> = {};
+  if (p.transport) qs.corrNr = p.transport;
+
+  try {
+    await client.httpClient.request(ADT_DDIC_DDL_SOURCES, {
+      method: "POST",
+      headers: { "Content-Type": "application/*" },
+      qs,
+      body,
+    });
+  } catch (createErr) {
+    const errMsg = createErr instanceof Error ? createErr.message : String(createErr);
+    if (errMsg.includes("already exist") || errMsg.includes("SADT_RESOURCE/1")) {
+      throw createErr;
+    }
+    try {
+      await client.objectStructure(url);
+      return ok(`✅ CDS View '${n}' created (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})\nURI: ${url}`);
+    } catch {
+      throw createErr;
+    }
+  }
+
   return ok(`✅ CDS View '${n}' created\nURI: ${url}`);
 }
 
@@ -234,18 +272,18 @@ export async function handleCreateBehaviorDefinition(client: ADTClient, args: Re
   const n = p.name.toUpperCase();
   const responsible = client.httpClient.username.toUpperCase();
 
-  // abap-adt-api has no BDEF support — direct HTTP POST following the createBodySimple pattern
-  // from objectcreator.js: xmlns from /sap/bc/adt/bo/behaviors, type BDEF/BF
+  // abap-adt-api has no BDEF support — direct HTTP POST to /sap/bc/adt/bo/behaviordefinitions
+  // The endpoint expects the standard blue:blueSource format (same as TABL/DDLS), type BDEF/BDO
   const body = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<bdef:behaviorDefinition xmlns:bdef="http://www.sap.com/adt/bo/behaviors"`,
+    `<blue:blueSource xmlns:blue="http://www.sap.com/wbobj/blue"`,
     `  xmlns:adtcore="http://www.sap.com/adt/core"`,
     `  adtcore:description="${encXml(p.description)}"`,
-    `  adtcore:name="${n}" adtcore:type="BDEF/BF"`,
+    `  adtcore:name="${n}" adtcore:type="BDEF/BDO"`,
     `  adtcore:language="EN" adtcore:masterLanguage="EN"`,
     `  adtcore:responsible="${responsible}">`,
     `  <adtcore:packageRef adtcore:name="${p.devClass}"/>`,
-    `</bdef:behaviorDefinition>`,
+    `</blue:blueSource>`,
   ].join("\n");
 
   const qs: Record<string, string> = {};

@@ -79,7 +79,7 @@ export const ADT_ACM_DCL_SOURCES = "/sap/bc/adt/acm/dcl/sources";
 /** Behavior Definition (BDEF) base path
  * Used by: create_behavior_definition
  * Note: abap-adt-api has no BDEF support — this handler uses a direct httpClient POST. */
-export const ADT_BO_BEHAVIORS = "/sap/bc/adt/bo/behaviors";
+export const ADT_BO_BEHAVIORS = "/sap/bc/adt/bo/behaviordefinitions";
 
 // ── Packages ────────────────────────────────────────────────────────
 
