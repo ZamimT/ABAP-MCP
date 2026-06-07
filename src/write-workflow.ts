@@ -32,8 +32,40 @@ export async function writeWorkflow(
       // Phase 1: lock → write → unlock (stateful session needed for lock/write)
       log.push(`🔒 Locking: ${objectUrl}`);
       // Direct lock — withStatefulSession already manages the session
-      const lock = await client.lock(objectUrl);
-      lockHandle = lock.LOCK_HANDLE;
+      let lockResult: { LOCK_HANDLE?: string } | undefined;
+      try {
+        lockResult = await client.lock(objectUrl);
+      } catch (lockErr) {
+        const errMsg = lockErr instanceof Error ? lockErr.message : String(lockErr);
+        // CTS_WBO_API/19 = "Object already locked in request X of user Y"
+        // When the same user has the object locked in a transport task, retry with corrNr
+        // so ADT returns the existing lock handle instead of rejecting the request.
+        if (transport && errMsg.includes("CTS_WBO_API")) {
+          log.push(`⚠️ Lock failed (object in transport), retrying with corrNr=${transport}...`);
+          try {
+            const lockResp = await client.httpClient.request(objectUrl, {
+              method: "POST",
+              headers: {
+                Accept: "application/*,application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.lock.result",
+              },
+              qs: { _action: "LOCK", accessMode: "MODIFY", corrNr: transport },
+            });
+            const bodyStr = typeof lockResp.body === "string" ? lockResp.body : JSON.stringify(lockResp.body);
+            const match = bodyStr.match(/<LOCK_HANDLE>(.*?)<\/LOCK_HANDLE>/);
+            const handle = match?.[1];
+            if (!handle) throw new Error("No LOCK_HANDLE in response");
+            lockResult = { LOCK_HANDLE: handle };
+            log.push(`✅ Lock acquired (corrNr retry)`);
+          } catch (retryErr) {
+            throw new Error(
+              `Lock failed: ${errMsg}. corrNr retry also failed: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`
+            );
+          }
+        } else {
+          throw lockErr;
+        }
+      }
+      lockHandle = lockResult?.LOCK_HANDLE;
       if (!lockHandle) throw new Error("Lock failed — no lock handle received");
       log.push(`✅ Lock acquired`);
       await onProgress?.("🔒 Lock acquired");
