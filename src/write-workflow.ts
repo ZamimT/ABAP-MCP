@@ -40,15 +40,20 @@ export async function writeWorkflow(
         // CTS_WBO_API/19 = "Object already locked in request X of user Y"
         // When the same user has the object locked in a transport task, retry with corrNr
         // so ADT returns the existing lock handle instead of rejecting the request.
-        if (transport && errMsg.includes("CTS_WBO_API")) {
-          log.push(`⚠️ Lock failed (object in transport), retrying with corrNr=${transport}...`);
+        if (errMsg.includes("CTS_WBO_API")) {
+          // Extract the transport that actually holds the lock from the error message
+          // e.g. "already locked in request S4PK912551 of user ..."
+          const lockedInMatch = errMsg.match(/locked in request (\w+)/i);
+          const corrNr = lockedInMatch?.[1] ?? transport;
+          if (!corrNr) { throw lockErr; }
+          log.push(`⚠️ Lock failed (object in transport ${corrNr}), retrying with corrNr=${corrNr}...`);
           try {
             const lockResp = await client.httpClient.request(objectUrl, {
               method: "POST",
               headers: {
                 Accept: "application/*,application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.lock.result",
               },
-              qs: { _action: "LOCK", accessMode: "MODIFY", corrNr: transport },
+              qs: { _action: "LOCK", accessMode: "MODIFY", corrNr },
             });
             const bodyStr = typeof lockResp.body === "string" ? lockResp.body : JSON.stringify(lockResp.body);
             const match = bodyStr.match(/<LOCK_HANDLE>(.*?)<\/LOCK_HANDLE>/);
