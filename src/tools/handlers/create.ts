@@ -2,7 +2,7 @@
  * CREATE tool handlers: all 7 create_* tools
  */
 
-import type { ADTClient, NewBindingOptions } from "abap-adt-api";
+import type { ADTClient } from "abap-adt-api";
 import type { ToolResult } from "../../types.js";
 import { S_CreateProgram, S_CreateClass, S_CreateInterface, S_CreateFunctionGroup, S_CreateCdsView, S_CreateTable, S_CreateMessageClass, S_CreateCdsMetadataExtension, S_CreateServiceDefinition, S_CreateServiceBinding, S_PublishServiceBinding, S_CreateDataControlLanguage, S_CreateBehaviorDefinition } from "../../schemas.js";
 import { ADT_PACKAGES, ADT_PROGRAMS, ADT_CLASSES, ADT_INTERFACES, ADT_FUNCTION_GROUPS, ADT_DDIC_DDL_SOURCES, ADT_DDIC_TABLES, ADT_DDIC_DDLX_SOURCES, ADT_DDIC_SRVD_SOURCES, ADT_BUSINESSSERVICES_BINDINGS, ADT_ACM_DCL_SOURCES, ADT_BO_BEHAVIORS } from "../../adt-endpoints.js";
@@ -252,27 +252,53 @@ export async function handleCreateServiceBinding(client: ADTClient, args: Record
   assertPackageAllowed(p.devClass);
   assertCustomerNamespace(p.name, ["Z", "Y"]);
   const n = p.name.toUpperCase();
-  // BindingCategory in abap-adt-api is typed as "0"|"1" (V2 only) but ADT also
-  // accepts "2" (V4 UI) and "3" (V4 Web API). Cast to satisfy the compiler.
-  const category = (
-    p.bindingType === "V2_UI"      ? "1" :
-    p.bindingType === "V4_UI"      ? "2" :
-    p.bindingType === "V4_WEB_API" ? "3" : "0"
-  ) as NewBindingOptions["category"];
-  const bindingOptions: NewBindingOptions = {
-    objtype: "SRVB/SVB",
-    name: n,
-    parentName: p.devClass,
-    description: p.description,
-    parentPath: `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`,
-    service: p.serviceDefinition.toUpperCase(),
-    bindingtype: "ODATA",
-    category,
-    transport: p.transport || undefined,
-  };
-  await client.createObject(bindingOptions);
+  const responsible = client.httpClient.username.toUpperCase();
+  const svc = p.serviceDefinition.toUpperCase();
+
+  // The binding type is encoded by TWO orthogonal attributes on <srvb:binding>:
+  //   srvb:version  = "V2" | "V4"  (OData protocol version)
+  //   srvb:category = "0"  | "1"   ("0" = Web API, "1" = UI)
+  // (verified against a live V4 Web API binding: type="ODATA" version="V4" category="0").
+  // abap-adt-api's createObject hardcodes version="V2" category="0" in
+  // objectcreator.createBodyBinding, so it can ONLY ever create an OData V2
+  // binding — the requested category is silently dropped. We therefore build the
+  // ADT create payload ourselves and POST it directly, mirroring createObject's
+  // URL/headers/transport handling (same pattern as create_behavior_definition).
+  const odataVersion = p.bindingType.startsWith("V4") ? "V4" : "V2";
+  const category = p.bindingType.endsWith("_UI") ? "1" : "0";
+
+  const body = [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<srvb:serviceBinding xmlns:srvb="http://www.sap.com/adt/ddic/ServiceBindings"`,
+    `  xmlns:adtcore="http://www.sap.com/adt/core"`,
+    `  adtcore:description="${encXml(p.description)}"`,
+    `  adtcore:name="${n}" adtcore:type="SRVB/SVB"`,
+    `  adtcore:language="EN" adtcore:masterLanguage="EN"`,
+    `  adtcore:responsible="${responsible}">`,
+    `  <adtcore:packageRef adtcore:name="${p.devClass}"/>`,
+    `  <srvb:services srvb:name="${n}">`,
+    `    <srvb:content srvb:version="0001">`,
+    `      <srvb:serviceDefinition adtcore:name="${svc}"/>`,
+    `    </srvb:content>`,
+    `  </srvb:services>`,
+    `  <srvb:binding srvb:type="ODATA" srvb:version="${odataVersion}" srvb:category="${category}">`,
+    `    <srvb:implementation adtcore:name=""/>`,
+    `  </srvb:binding>`,
+    `</srvb:serviceBinding>`,
+  ].join("\n");
+
+  const qs: Record<string, string> = {};
+  if (p.transport) qs.corrNr = p.transport;
+
+  await client.httpClient.request(ADT_BUSINESSSERVICES_BINDINGS, {
+    method: "POST",
+    headers: { "Content-Type": "application/*" },
+    qs,
+    body,
+  });
+
   const url = `${ADT_BUSINESSSERVICES_BINDINGS}/${n.toLowerCase()}`;
-  return ok(`✅ Service Binding '${n}' created (${p.bindingType})\nService Definition: ${p.serviceDefinition.toUpperCase()}\nURI: ${url}\n\nNext step:\n  publish_service_binding with name='${n}'`);
+  return ok(`✅ Service Binding '${n}' created (${p.bindingType} → OData ${odataVersion}, category ${category})\nService Definition: ${svc}\nURI: ${url}\n\nNext step:\n  publish_service_binding with name='${n}'`);
 }
 
 export async function handlePublishServiceBinding(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -280,11 +306,47 @@ export async function handlePublishServiceBinding(client: ADTClient, args: Recor
   const p = S_PublishServiceBinding.parse(args);
   const n = p.name.toUpperCase();
   const version = p.version ?? "0001";
-  const result = await client.publishServiceBinding(n, version);
-  if (result.severity === "E" || result.severity === "A") {
-    return { content: [{ type: "text", text: `❌ Publish failed (${result.severity}): ${result.shortText}\n${result.longText}` }] };
+
+  // abap-adt-api's publishServiceBinding hardcodes the OData *V2* publish-job
+  // endpoint (/businessservices/odatav2/publishjobs), so it silently fails to
+  // register a V4 binding's service group. It also only treats severity "E"/"A"
+  // as failure, but the backend returns the full word "ERROR" — so real failures
+  // (e.g. "Publishing in Customizing Client not allowed") were reported as success
+  // with an undefined message. We detect the binding's protocol and POST the
+  // publish job to the matching endpoint ourselves, then parse the result robustly.
+  let protocol: "odatav2" | "odatav4" = "odatav2";
+  try {
+    const info = await client.httpClient.request(`${ADT_BUSINESSSERVICES_BINDINGS}/${n.toLowerCase()}`, {
+      headers: { Accept: "application/vnd.sap.adt.businessservices.servicebinding.v2+xml" },
+    });
+    if (/srvb:version="V4"/.test(info.body)) protocol = "odatav4";
+  } catch {
+    // Binding not readable — fall back to odatav2 (legacy default).
   }
-  return ok(`✅ Service Binding '${n}' published successfully\n${result.shortText}${result.longText ? "\n" + result.longText : ""}`);
+
+  const body =
+    `<adtcore:objectReferences xmlns:adtcore="http://www.sap.com/adt/core">` +
+    `<adtcore:objectReference adtcore:name="${n}"/>` +
+    `</adtcore:objectReferences>`;
+  const url =
+    `/sap/bc/adt/businessservices/${protocol}/publishjobs` +
+    `?servicename=${encodeURIComponent(n)}&serviceversion=${version}`;
+
+  const resp = await client.httpClient.request(url, {
+    method: "POST",
+    headers: { Accept: "application/*", "Content-Type": "application/*" },
+    body,
+  });
+
+  const pick = (tag: string) => new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(resp.body)?.[1] ?? "";
+  const severity = pick("SEVERITY");
+  const shortText = pick("SHORT_TEXT");
+  const longText = pick("LONG_TEXT");
+
+  if (/^(E|A|ERROR|ABORT)$/i.test(severity)) {
+    return { content: [{ type: "text", text: `❌ Publish failed (${severity}) via ${protocol}: ${shortText}${longText ? "\n" + longText : ""}` }] };
+  }
+  return ok(`✅ Service Binding '${n}' published via ${protocol}${shortText ? "\n" + shortText : ""}${longText ? "\n" + longText : ""}`);
 }
 
 export async function handleCreateDataControlLanguage(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
