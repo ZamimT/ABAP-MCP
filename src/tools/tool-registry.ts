@@ -65,6 +65,7 @@ export const FIND_TOOLS_ENTRY = {
     "ANALYSIS (call graph, dead-code detection), INTENT (consolidated SAPRead/SAPWrite/SAPSearch/SAPDiagnose verbs). " +
     "Enabled tools become immediately available.",
   schema: S_FindTools,
+  requiresAdt: false,
 };
 
 export const LIST_TOOLS_ENTRY = {
@@ -74,6 +75,7 @@ export const LIST_TOOLS_ENTRY = {
     "Shows which tools are currently active (core/enabled) vs. deferred. " +
     "Use this to discover the right tool for a task. Unlike find_tools, this does NOT enable tools — it only lists them.",
   schema: S_ListTools,
+  requiresAdt: false,
 };
 
 export const TOOL_SHORT_DESCRIPTIONS: Record<string, string> = {
@@ -150,3 +152,10 @@ export const TOOL_SHORT_DESCRIPTIONS: Record<string, string> = {
 
 // Build combined tool list (TOOLS + find_tools + list_tools)
 export const ALL_TOOLS = [...TOOLS, FIND_TOOLS_ENTRY, LIST_TOOLS_ENTRY];
+
+// Tools flagged `requiresAdt: false` in their definition never touch the SAP
+// system; the server skips the ADT connection for them. Derived from the tool
+// definitions so the flag lives next to each tool and the set cannot drift.
+export const NO_ADT_TOOL_NAMES: ReadonlySet<string> = new Set(
+  ALL_TOOLS.filter((t) => t.requiresAdt === false).map((t) => t.name),
+);

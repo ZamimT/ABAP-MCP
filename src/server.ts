@@ -18,7 +18,7 @@ import { cfg } from "./config.js";
 import { getClient } from "./adt-client.js";
 import { toJsonSchema } from "./helpers/json-schema.js";
 import { getAbapDevelopPrompt } from "./prompt.js";
-import { ALL_TOOLS, CORE_TOOL_NAMES, enabledTools, TOOL_CATEGORIES } from "./tools/tool-registry.js";
+import { ALL_TOOLS, CORE_TOOL_NAMES, enabledTools, NO_ADT_TOOL_NAMES, TOOL_CATEGORIES } from "./tools/tool-registry.js";
 import { HANDLER_MAP } from "./tools/handler-map.js";
 import { setNotifyToolListChanged } from "./tools/handlers/meta.js";
 
@@ -78,22 +78,12 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
 
 // ── CALL TOOL ───────────────────────────────────────────────────────────────
 
-// Tools that do NOT require an ADT connection (pure web/local tools)
-const NO_ADT_TOOLS = new Set([
-  "fetch_url",
-  "search_sap_web",
-  "review_clean_abap",
-  "search_clean_abap",
-  "validate_ddic_references",
-  "find_tools",
-  "list_tools",
-]);
-
 server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   const { name, arguments: args } = request.params;
 
-  // Only connect to ADT if the tool actually needs it
-  const client = NO_ADT_TOOLS.has(name) ? null! : await getClient();
+  // Only connect to ADT if the tool actually needs it. Tools flagged
+  // `requiresAdt: false` in their definition never read the client argument.
+  const client = NO_ADT_TOOL_NAMES.has(name) ? null! : await getClient();
 
   try {
     const handler = HANDLER_MAP.get(name);

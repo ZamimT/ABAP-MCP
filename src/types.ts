@@ -9,6 +9,12 @@ export interface ToolDef {
   name: string;
   description: string;
   schema: z.ZodTypeAny;
+  /**
+   * Set to `false` for tools that never touch the SAP system (pure web/local
+   * tools). The server then skips the ADT connection for this call and the
+   * handler receives no usable client. Omitted = `true`.
+   */
+  requiresAdt?: boolean;
 }
 
 export type ToolResult = {

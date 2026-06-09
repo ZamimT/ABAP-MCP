@@ -2,6 +2,63 @@
 
 ---
 
+## 2026-06-09 — Qualitäts-Review der Web-Search-Implementierung (fetch_url)
+
+### Bugfix: `validate_ddic_references` lieferte ohne ADT-Verbindung stillschweigend falsche Ergebnisse
+
+**Problem:** Die `NO_ADT_TOOLS`-Liste in `server.ts` enthielt `validate_ddic_references`,
+obwohl das Tool `client.ddicElement()` aufruft. Wurde es als erstes Tool einer Session
+aufgerufen, war der Client `null` — jede Tabelle meldete dann
+„⚠️ DDIC not resolvable — Cannot read properties of null…" statt zu validieren.
+
+**Fix:** Die handgepflegte Liste wurde durch ein `requiresAdt: false`-Flag direkt an den
+Tool-Definitionen ersetzt (`src/types.ts`, `tool-definitions.ts`). Das Set
+`NO_ADT_TOOL_NAMES` wird daraus abgeleitet (`tool-registry.ts`) und kann nicht mehr
+driften. `validate_ddic_references` erhält wieder einen echten Client; die fünf
+DOCUMENTATION-Tools sowie `review_clean_abap` erzwingen umgekehrt **keinen** unnötigen
+SAP-Login mehr.
+
+### Security-Fix: Globale TLS-Deaktivierung entfernt
+
+**Problem:** `index.ts` setzte bei `SAP_ALLOW_UNAUTHORIZED=true` global
+`NODE_TLS_REJECT_UNAUTHORIZED=0` — damit war die Zertifikatsprüfung für **alle**
+ausgehenden TLS-Verbindungen aus (inkl. Tavily-Calls mit dem API-Key).
+
+**Fix:** Der globale Override ist entfernt; `SAP_ALLOW_UNAUTHORIZED` bleibt wie zuvor
+auf die ADT-Verbindung beschränkt (`adt-client.ts`). Für Corporate-Proxies mit
+TLS-Interception gibt es jetzt das separate Opt-in `WEB_ALLOW_UNAUTHORIZED`, das nur
+die Tavily-Fetches betrifft (undici-`Agent` als `dispatcher`). Der Startup-Banner
+warnt, wenn es aktiv ist.
+
+### Verbesserung: `fetch_url` nennt jetzt die echte Fehlerursache
+
+Bisher wurden alle Fehler verschluckt — bei ungültigem API-Key (HTTP 401) oder
+erschöpfter Quota (HTTP 429/432) kam die irreführende Meldung „Seite blockiert
+automatisierte Zugriffe". Jetzt werden die Fehlerdetails beider Strategien (Extract +
+Search-Fallback) gesammelt und mit konkretem Hinweis ausgegeben; `failed_results` der
+Extract-API wird ausgewertet. Tavily-Auth läuft über `Authorization: Bearer`-Header
+statt API-Key im Request-Body.
+
+### Refactoring & Tests
+
+- Neue pure Helper in `src/helpers/web.ts`: `truncateContent()` (dedupliziert),
+  `normalizeUrlForMatch()` + `pickBestResult()` (URL-Matching im Fallback ignoriert
+  jetzt http/https, `www.`, Trailing-Slash, Query & Fragment)
+- Neue Unit-Tests: `test/web.test.ts` (10 Tests, ohne Netzwerk)
+- Gemeinsame Konstante für die „Tavily nicht konfiguriert"-Meldung
+- Neue Dependency: `undici` (für den scoped TLS-Dispatcher)
+
+**Geänderte Dateien:**
+- `src/types.ts`, `src/tools/tool-definitions.ts`, `src/tools/tool-registry.ts`,
+  `src/server.ts` — `requiresAdt`-Flag + abgeleitetes `NO_ADT_TOOL_NAMES`
+- `src/index.ts` — globaler TLS-Override entfernt, Banner-Warnung
+- `src/config.ts` — `webAllowUnauthorized` (`WEB_ALLOW_UNAUTHORIZED`)
+- `src/tools/handlers/websearch.ts` — Bearer-Auth, Fehlerdetails, scoped Dispatcher
+- `src/helpers/web.ts`, `test/web.test.ts` — neue Helper + Tests
+- `.env.example`, `readme.md`, `DOCUMENTATION.md`, `CLAUDE.md` — Doku synchronisiert
+
+---
+
 ## 2026-06-09 — Bugfix: `create_cds_view` — falscher XML-Root-Namespace
 
 ### Fix: DDLS-Anlage schlug mit "System expected the element ddlSource" fehl

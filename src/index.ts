@@ -6,12 +6,6 @@
 
 import "dotenv/config";
 
-// If SAP_ALLOW_UNAUTHORIZED is set, also disable TLS verification globally
-// (needed for Tavily/web fetch calls behind corporate proxies with self-signed certs)
-if (process.env.SAP_ALLOW_UNAUTHORIZED?.toLowerCase() === "true") {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-}
-
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { cfg } from "./config.js";
@@ -49,7 +43,8 @@ function printBanner(): void {
     : `${ALL_TOOLS.length} registriert`;
   console.error(`  Tools   : ${toolsLabel}`);
   console.error(`  Doku    : help.sap.com v${cfg.sapAbapVersion}`);
-  console.error(`  WebSrch : ${cfg.tavilyApiKey ? "✅ aktiv" : "❌ nicht konfiguriert"}`);
+  const webTls = cfg.webAllowUnauthorized ? " (⚠️ TLS-Verifikation für Web-Calls deaktiviert)" : "";
+  console.error(`  WebSrch : ${cfg.tavilyApiKey ? `✅ aktiv${webTls}` : "❌ nicht konfiguriert"}`);
   console.error(`  Prompts : 1 (abap_develop)`);
 }
 

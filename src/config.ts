@@ -129,6 +129,11 @@ export const cfg = Object.freeze({
   deferTools: bool("DEFER_TOOLS", true),
   sapAbapVersion: str("SAP_ABAP_VERSION", "latest"),
   tavilyApiKey: str("TAVILY_API_KEY"),
+  // Disable TLS certificate verification ONLY for outbound web calls
+  // (Tavily fetch_url/search_sap_web) — for corporate proxies that intercept
+  // TLS with self-signed certs. Deliberately separate from
+  // SAP_ALLOW_UNAUTHORIZED, which stays scoped to the ADT connection.
+  webAllowUnauthorized: bool("WEB_ALLOW_UNAUTHORIZED"),
 
   // ── Governance ────────────────────────────────────────────────
   // Role layers on top of the ALLOW_* flags: it can only *further* restrict,

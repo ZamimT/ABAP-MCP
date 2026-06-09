@@ -230,22 +230,27 @@ export const TOOLS: ToolDef[] = [
   // ── DOCUMENTATION ─────────────────────────────────────────────────────
   { name: "get_abap_keyword_doc",
     description: "Fetches ABAP keyword documentation from help.sap.com (e.g. SELECT, LOOP, READ TABLE). Returns the official SAP documentation as formatted text.",
-    schema: S.S_GetAbapKeywordDoc },
+    schema: S.S_GetAbapKeywordDoc,
+    requiresAdt: false },
   { name: "get_abap_class_doc",
     description: "Fetches ABAP class/interface documentation from help.sap.com (e.g. CL_SALV_TABLE, IF_AMDP_MARKER_HDB). Returns the official SAP documentation as formatted text.",
-    schema: S.S_GetAbapClassDoc },
+    schema: S.S_GetAbapClassDoc,
+    requiresAdt: false },
   { name: "get_module_best_practices",
     description: "Returns module-specific SAP ABAP best practices (important tables, recommended BAPIs/classes, coding guidelines, common errors, S/4HANA migration hints). Modules: FI, CO, MM, SD, PP, PM, QM, HR, HCM, PS, WM, EWM, BASIS, BC, ABAP.",
-    schema: S.S_GetModuleBestPractices },
+    schema: S.S_GetModuleBestPractices,
+    requiresAdt: false },
   { name: "search_clean_abap",
     description: "Searches the official SAP Clean ABAP Styleguide (github.com/SAP/styleguides) for best practices, naming conventions, coding guidelines and anti-patterns. " +
       "Returns the most relevant sections. Call before writing new code to comply with Clean ABAP conventions.",
-    schema: S.S_SearchCleanAbap },
+    schema: S.S_SearchCleanAbap,
+    requiresAdt: false },
   { name: "search_abap_syntax",
     description: "Searches the official ABAP syntax documentation from help.sap.com based on a free-text query (e.g. 'SELECT UP TO ROWS', 'LOOP AT clause order'). " +
       "Automatically identifies the main keyword, loads the documentation page and returns the relevant syntax section. " +
       "Call BEFORE writing ABAP code to ensure correct syntax.",
-    schema: S.S_SearchAbapSyntax },
+    schema: S.S_SearchAbapSyntax,
+    requiresAdt: false },
   { name: "review_clean_abap",
     description:
       "Reviews ABAP source code for Clean ABAP compliance. " +
@@ -254,7 +259,8 @@ export const TOOLS: ToolDef[] = [
       "relevant Clean ABAP guideline excerpts. " +
       "No SAP system connection required — pure static analysis. " +
       "Call on existing code before writing to understand current conventions.",
-    schema: S.S_ReviewCleanAbap },
+    schema: S.S_ReviewCleanAbap,
+    requiresAdt: false },
 
   // ── WEBSEARCH ──────────────────────────────────────────────────────────
   { name: "fetch_url",
@@ -262,13 +268,15 @@ export const TOOLS: ToolDef[] = [
       "SAP Community blogs, SAP Notes, or any web page. Returns the extracted text content. " +
       "Use when you need to read the actual content of a specific URL (not search). " +
       "Requires TAVILY_API_KEY in .env.",
-    schema: S.S_FetchUrl },
+    schema: S.S_FetchUrl,
+    requiresAdt: false },
   { name: "search_sap_web",
     description: "Searches SAP Help (help.sap.com), SAP Community (community.sap.com) and SAP Notes (me.sap.com) via Tavily Search API. " +
       "Returns compact results (title + URL + snippet) to minimize token usage. " +
       "Use for: error messages, SAP Notes, best practices, blog posts, KBAs, migration guides. " +
       "Requires TAVILY_API_KEY in .env.",
-    schema: S.S_SearchSapWeb },
+    schema: S.S_SearchSapWeb,
+    requiresAdt: false },
 
   // ── ANALYSIS ───────────────────────────────────────────────────────────
   { name: "get_call_graph",

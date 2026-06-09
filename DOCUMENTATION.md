@@ -153,7 +153,8 @@ cp .env.example .env
 | `SYNTAX_CHECK_BEFORE_ACTIVATE` | | `true` | Syntaxcheck vor Aktivierung erzwingen |
 | `MAX_DUMPS` | | `20` | Maximale Anzahl Short Dumps |
 | `SAP_ABAP_VERSION` | | `latest` | ABAP-Version für help.sap.com Dokumentation (z.B. `latest`, `758`, `754`) |
-| `SAP_ALLOW_UNAUTHORIZED` | | `false` | Self-signed SSL-Zertifikate akzeptieren (nur DEV!) |
+| `SAP_ALLOW_UNAUTHORIZED` | | `false` | Self-signed SSL-Zertifikate akzeptieren — nur ADT-Verbindung (nur DEV!) |
+| `WEB_ALLOW_UNAUTHORIZED` | | `false` | TLS-Prüfung nur für Web-Calls (`fetch_url`/`search_sap_web`) deaktivieren — Corporate-Proxies mit TLS-Interception |
 | `DEFER_TOOLS` | | `true` | Tool-Deferred-Modus: initial nur 13 Kern-Tools laden |
 | `TAVILY_API_KEY` | | — | Tavily API Key (für `fetch_url` und `search_sap_web`). Free: 1000/Monat |
 
@@ -258,7 +259,7 @@ Kategorieübersicht anzeigen
 → find_tools()
 ```
 
-**Kern-Tools (immer verfügbar):** `search_abap_objects`, `search_source_code`, `read_abap_source`, `write_abap_source`, `get_object_info`, `where_used`, `analyze_abap_context`, `search_abap_syntax`, `validate_ddic_references`, `batch_read`, `fetch_url`, `search_sap_web`, `get_abap_contract`, `SAPRead`, `SAPWrite`, `SAPSearch`, `SAPDiagnose`, `find_tools`, `list_tools`
+**Kern-Tools (immer verfügbar):** `find_tools`, `list_tools`, `analyze_abap_context`, `search_abap_syntax`, `validate_ddic_references`, `batch_read`, `fetch_url`, `search_sap_web`, `get_abap_contract`, `SAPRead`, `SAPWrite`, `SAPSearch`, `SAPDiagnose`
 
 ---
 
@@ -1681,8 +1682,11 @@ Beliebige Webseite lesen
 
 **Verhalten:**
 1. **Strategie 1:** Tavily Extract API — rendert JavaScript und extrahiert den Seiteninhalt
-2. **Strategie 2 (Fallback):** Tavily Search mit `include_raw_content` — sucht die URL und gibt den gecachten Inhalt zurück
+2. **Strategie 2 (Fallback):** Tavily Search mit `include_raw_content` — sucht die URL und gibt den gecachten Inhalt zurück (URL-Vergleich ignoriert http/https, `www.`, Trailing-Slash, Query & Fragment)
 3. Sehr lange Inhalte werden auf ~15.000 Zeichen gekürzt, um Token-Explosion zu vermeiden
+4. Schlagen beide Strategien fehl, listet die Fehlermeldung die konkreten Ursachen pro Strategie auf — inkl. Hinweis bei ungültigem API-Key (HTTP 401/403) oder erschöpfter Quota (HTTP 429/432)
+
+> **Corporate-Proxy mit TLS-Interception?** `WEB_ALLOW_UNAUTHORIZED=true` deaktiviert die Zertifikatsprüfung **nur** für die Tavily-Calls (nicht für die ADT-Verbindung).
 
 **Unterschied zu `search_sap_web`:** `fetch_url` liest den Inhalt einer **bekannten URL**. `search_sap_web` **sucht** nach Inhalten anhand von Suchbegriffen.
 

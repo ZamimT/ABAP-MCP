@@ -5,13 +5,49 @@
  * Returns compact results (title + URL + snippet) to minimize token usage.
  */
 
+import { Agent, type Dispatcher } from "undici";
+
 import type { ADTClient } from "abap-adt-api";
 import type { ToolResult } from "../../types.js";
 import { S_FetchUrl, S_SearchSapWeb } from "../../schemas.js";
 import { cfg } from "../../config.js";
+import { truncateContent, pickBestResult } from "../../helpers/web.js";
 
 function ok(text: string): ToolResult { return { content: [{ type: "text", text }] }; }
 function err(text: string): ToolResult { return { content: [{ type: "text", text }], isError: true }; }
+
+const MISSING_KEY_MESSAGE =
+  "Tavily API nicht konfiguriert. " +
+  "Bitte TAVILY_API_KEY in der .env setzen.\n" +
+  "Setup: https://tavily.com/ → Sign up → API Key kopieren.\n" +
+  "Free Tier: 1000 Searches/Monat.";
+
+// TLS verification opt-out scoped to Tavily calls only (corporate proxies with
+// self-signed certs). Never touches the ADT connection or other outbound TLS.
+const webDispatcher: Dispatcher | undefined = cfg.webAllowUnauthorized
+  ? new Agent({ connect: { rejectUnauthorized: false } })
+  : undefined;
+
+/** POST to a Tavily endpoint with Bearer auth, timeout and optional lax-TLS dispatcher. */
+function tavilyPost(endpoint: "extract" | "search", body: object, timeoutMs: number): Promise<Response> {
+  return fetch(`https://api.tavily.com/${endpoint}`, {
+    method: "POST",
+    signal: AbortSignal.timeout(timeoutMs),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${cfg.tavilyApiKey}`,
+    },
+    body: JSON.stringify(body),
+    dispatcher: webDispatcher,
+  } as RequestInit);
+}
+
+/** Map a Tavily HTTP error status to an actionable German hint. */
+function tavilyHttpHint(status: number): string {
+  if (status === 401 || status === 403) return "TAVILY_API_KEY ungültig oder abgelaufen — Key in der .env prüfen.";
+  if (status === 429 || status === 432) return "Tavily-Kontingent erschöpft (Rate-Limit/Monats-Quota) — später erneut versuchen oder Plan upgraden.";
+  return "";
+}
 
 interface TavilyResult {
   title: string;
@@ -42,24 +78,17 @@ async function tavilySearch(
   includeDomains: string[],
   maxResults: number,
 ): Promise<TavilyResult[]> {
-  const resp = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    signal: AbortSignal.timeout(15_000),
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      api_key: cfg.tavilyApiKey,
-      query,
-      max_results: maxResults,
-      include_domains: includeDomains,
-      search_depth: "basic",
-    }),
-  });
+  const resp = await tavilyPost("search", {
+    query,
+    max_results: maxResults,
+    include_domains: includeDomains,
+    search_depth: "basic",
+  }, 15_000);
 
   if (!resp.ok) {
     const body = await resp.text().catch(() => "");
-    throw new Error(`Tavily API HTTP ${resp.status}: ${body.slice(0, 200)}`);
+    const hint = tavilyHttpHint(resp.status);
+    throw new Error(`Tavily API HTTP ${resp.status}: ${body.slice(0, 200)}${hint ? ` — ${hint}` : ""}`);
   }
 
   const data = (await resp.json()) as TavilyResponse;
@@ -87,85 +116,70 @@ interface TavilyExtractResponse {
   failed_results?: { url: string; error: string }[];
 }
 
+const FETCH_URL_MAX_LEN = 15_000;
+
 export async function handleFetchUrl(_client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
-  if (!cfg.tavilyApiKey) {
-    return err(
-      "Tavily API nicht konfiguriert. " +
-      "Bitte TAVILY_API_KEY in der .env setzen.\n" +
-      "Setup: https://tavily.com/ → Sign up → API Key kopieren.\n" +
-      "Free Tier: 1000 Searches/Monat."
-    );
-  }
+  if (!cfg.tavilyApiKey) return err(MISSING_KEY_MESSAGE);
 
   const p = S_FetchUrl.parse(args);
-  const maxLen = 15000;
+  // Collected per-strategy failure details so the final error names the real
+  // cause (e.g. invalid key, quota exhausted) instead of a generic guess.
+  const failures: string[] = [];
 
-  // Strategy 1: Try Tavily Extract API first
+  // Strategy 1: Tavily Extract API
   try {
-    const resp = await fetch("https://api.tavily.com/extract", {
-      method: "POST",
-      signal: AbortSignal.timeout(30_000),
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: cfg.tavilyApiKey,
-        urls: [p.url],
-      }),
-    });
+    const resp = await tavilyPost("extract", { urls: [p.url] }, 30_000);
 
     if (resp.ok) {
       const data = (await resp.json()) as TavilyExtractResponse;
-      if (data.results && data.results.length > 0) {
-        const content = data.results[0].raw_content;
-        if (content && content.trim().length > 0) {
-          const truncated = content.length > maxLen
-            ? content.slice(0, maxLen) + `\n\n--- [Inhalt gekürzt: ${content.length} → ${maxLen} Zeichen] ---`
-            : content;
-          return ok(`# Inhalt von: ${p.url}\n\n${truncated}`);
-        }
+      const content = data.results?.[0]?.raw_content;
+      if (content && content.trim().length > 0) {
+        return ok(`# Inhalt von: ${p.url}\n\n${truncateContent(content, FETCH_URL_MAX_LEN)}`);
       }
+      const failed = data.failed_results?.[0];
+      failures.push(failed
+        ? `Extract: ${failed.error}`
+        : "Extract: leere Antwort (kein Inhalt extrahierbar)");
+    } else {
+      const body = await resp.text().catch(() => "");
+      const hint = tavilyHttpHint(resp.status);
+      failures.push(`Extract: HTTP ${resp.status} ${body.slice(0, 150)}${hint ? ` — ${hint}` : ""}`);
     }
-  } catch { /* Extract failed, try fallback */ }
+  } catch (e) {
+    failures.push(`Extract: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
-  // Strategy 2: Fallback — use Tavily Search with URL as query + include_raw_content
+  // Strategy 2: Fallback — Tavily Search with URL as query + include_raw_content
   try {
     const domain = new URL(p.url).hostname;
-    const resp = await fetch("https://api.tavily.com/search", {
-      method: "POST",
-      signal: AbortSignal.timeout(20_000),
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: cfg.tavilyApiKey,
-        query: p.url,
-        max_results: 3,
-        include_domains: [domain],
-        search_depth: "advanced",
-        include_raw_content: true,
-      }),
-    });
+    const resp = await tavilyPost("search", {
+      query: p.url,
+      max_results: 3,
+      include_domains: [domain],
+      search_depth: "advanced",
+      include_raw_content: true,
+    }, 20_000);
 
     if (resp.ok) {
       const data = (await resp.json()) as { results: Array<{ url: string; title: string; raw_content?: string; content: string }> };
-      // Find the exact URL match or best match
-      const exact = data.results?.find(r => r.url === p.url || r.url.includes(p.url.split("?")[0]));
-      const best = exact ?? data.results?.[0];
-      if (best) {
-        const content = best.raw_content || best.content;
-        if (content && content.trim().length > 0) {
-          const truncated = content.length > maxLen
-            ? content.slice(0, maxLen) + `\n\n--- [Inhalt gekürzt: ${content.length} → ${maxLen} Zeichen] ---`
-            : content;
-          return ok(`# Inhalt von: ${best.url}\n**${best.title}**\n\n${truncated}`);
-        }
+      const best = pickBestResult(p.url, data.results);
+      const content = best?.raw_content || best?.content;
+      if (best && content && content.trim().length > 0) {
+        return ok(`# Inhalt von: ${best.url}\n**${best.title}**\n\n${truncateContent(content, FETCH_URL_MAX_LEN)}`);
       }
+      failures.push("Search-Fallback: keine verwertbaren Treffer");
+    } else {
+      const body = await resp.text().catch(() => "");
+      const hint = tavilyHttpHint(resp.status);
+      failures.push(`Search-Fallback: HTTP ${resp.status} ${body.slice(0, 150)}${hint ? ` — ${hint}` : ""}`);
     }
-  } catch { /* Search fallback also failed */ }
+  } catch (e) {
+    failures.push(`Search-Fallback: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   return err(
     `URL konnte nicht gelesen werden: ${p.url}\n\n` +
-    `Mögliche Ursachen:\n` +
-    `- Die Seite blockiert automatisierte Zugriffe\n` +
-    `- Die Seite benötigt JavaScript-Rendering das nicht unterstützt wird\n` +
-    `- Netzwerkfehler\n\n` +
+    `Fehlerdetails:\n${failures.map((f) => `- ${f}`).join("\n")}\n\n` +
     `Tipp: Versuche search_sap_web mit relevanten Suchbegriffen statt der direkten URL.`
   );
 }
@@ -173,14 +187,7 @@ export async function handleFetchUrl(_client: ADTClient, args: Record<string, un
 // ── search_sap_web handler ────────────────────────────────────────────────────
 
 export async function handleSearchSapWeb(_client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
-  if (!cfg.tavilyApiKey) {
-    return err(
-      "Tavily API nicht konfiguriert. " +
-      "Bitte TAVILY_API_KEY in der .env setzen.\n" +
-      "Setup: https://tavily.com/ → Sign up → API Key kopieren.\n" +
-      "Free Tier: 1000 Searches/Monat."
-    );
-  }
+  if (!cfg.tavilyApiKey) return err(MISSING_KEY_MESSAGE);
 
   const p = S_SearchSapWeb.parse(args);
   const sources = p.sources ?? ["help", "community", "notes"];

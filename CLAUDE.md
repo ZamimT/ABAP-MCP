@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-ABAP MCP Server v2 is a standalone Model Context Protocol (MCP) server that enables AI assistants (Claude, Copilot, Cursor) to interact with SAP ABAP systems via the ADT REST API. It implements 66 tools across 16 categories + 2 meta-tools (`find_tools`, `list_tools`) + 1 MCP Prompt (`abap_develop`) for full ABAP development workflow support.
+ABAP MCP Server v2 is a standalone Model Context Protocol (MCP) server that enables AI assistants (Claude, Copilot, Cursor) to interact with SAP ABAP systems via the ADT REST API. It implements 67 tools across 16 categories + 2 meta-tools (`find_tools`, `list_tools`) + 1 MCP Prompt (`abap_develop`) for full ABAP development workflow support.
 
 ## Build & Development Commands
 
@@ -48,7 +48,7 @@ npm run clean
 - **Config**: `src/config.ts` — environment variable parsing
 - **Schemas**: `src/schemas.ts` — Zod parameter validation for all tools
 - **Tools**: `src/tools/` — tool definitions, registry, and handler dispatch map
-  - `tool-definitions.ts` — 59 tool metadata (name, description, schema)
+  - `tool-definitions.ts` — 67 tool metadata (name, description, schema, optional `requiresAdt: false` for tools that never touch SAP)
   - `tool-registry.ts` — categories, core tools, deferred loading
   - `handler-map.ts` — dispatch map (tool name → handler function)
   - `handlers/` — 20 handler modules (search, read, write, create, delete, test, quality, diagnostics, transport, abapgit, query, documentation, context, websearch, batch, meta, method, contract, analysis, intent)
@@ -66,8 +66,8 @@ npm run clean
 ### Tool Architecture
 - **Schema Validation**: Zod for all tool parameters (30+ schemas in `src/schemas.ts`)
 - **Tool Groups**: SEARCH, READ, WRITE, CREATE, DELETE, TEST, QUALITY, DIAGNOSTICS, TRANSPORT, ABAPGIT, QUERY, DOCUMENTATION, WEBSEARCH, BATCH, ANALYSIS (call graph, dead-code), INTENT (consolidated verbs)
-- **Deferred Loading** (default): Only 12 core tools (`find_tools`, `list_tools`, `analyze_abap_context`, `search_abap_syntax`, `validate_ddic_references`, `batch_read`, `search_sap_web`, `get_abap_contract`, `SAPRead`, `SAPWrite`, `SAPSearch`, `SAPDiagnose`) loaded initially; granular tools (`search_abap_objects`, `search_source_code`, `read_abap_source`, `write_abap_source`, `get_object_info`, `where_used`) are deferred — covered by the intent facade when needed; others activated on-demand via `find_tools` meta-tool (~75-80% token savings)
-- **Intent Facade**: `SAPRead`/`SAPWrite`/`SAPSearch`/`SAPDiagnose` (in `handlers/intent.ts`) delegate to granular handlers via an `operation` discriminator so clients can use ~4 verbs instead of 59 tools. Pure routing — safety guards/audit inherited from the delegate. `SAPDiagnose` also covers `workflow` → `analyze_workflow`.
+- **Deferred Loading** (default): Only 13 core tools (`find_tools`, `list_tools`, `analyze_abap_context`, `search_abap_syntax`, `validate_ddic_references`, `batch_read`, `fetch_url`, `search_sap_web`, `get_abap_contract`, `SAPRead`, `SAPWrite`, `SAPSearch`, `SAPDiagnose`) loaded initially; granular tools (`search_abap_objects`, `search_source_code`, `read_abap_source`, `write_abap_source`, `get_object_info`, `where_used`) are deferred — covered by the intent facade when needed; others activated on-demand via `find_tools` meta-tool (~75-80% token savings)
+- **Intent Facade**: `SAPRead`/`SAPWrite`/`SAPSearch`/`SAPDiagnose` (in `handlers/intent.ts`) delegate to granular handlers via an `operation` discriminator so clients can use ~4 verbs instead of 67 tools. Pure routing — safety guards/audit inherited from the delegate. `SAPDiagnose` also covers `workflow` → `analyze_workflow`.
 - **Method-level surgery**: `read_abap_method` / `edit_abap_method` read or rewrite a single `METHOD…ENDMETHOD` block (helper `helpers/method-splice.ts`). `edit_abap_method` splices the new body into the full source and runs the normal write workflow.
 - **Context compression**: `get_abap_contract` and `analyze_abap_context(mode=contract)` emit public signatures only (helper `helpers/contract.ts`), ~5–10% of full source.
 - **Analysis**: `get_call_graph` (recursive where-used → Mermaid) and `find_dead_code` (objects with no inbound usages).
@@ -97,7 +97,9 @@ lock(objectUrl)
 - `DEFAULT_TRANSPORT` — Default transport request for write operations
 - `SYNTAX_CHECK_BEFORE_ACTIVATE=true` (default) — Set `false` to skip syntax check before activation
 - `MAX_DUMPS=20` (default) — Max short dumps returned by diagnostics
-- `SAP_ALLOW_UNAUTHORIZED=false` (default) — Accept self-signed SSL certificates
+- `SAP_ALLOW_UNAUTHORIZED=false` (default) — Accept self-signed SSL certificates (scoped to the ADT connection only)
+- `WEB_ALLOW_UNAUTHORIZED=false` (default) — Accept self-signed SSL certificates for outbound web calls only (`fetch_url`/`search_sap_web` via Tavily) — for corporate proxies with TLS interception; deliberately separate from `SAP_ALLOW_UNAUTHORIZED`
+- `TAVILY_API_KEY` (optional) — Enables `fetch_url` and `search_sap_web` (sent as `Authorization: Bearer` header)
 
 **Safety Guards (all default-safe):**
 - `ALLOW_WRITE=false` (default) — Disables all write/create/delete tools
@@ -119,7 +121,7 @@ lock(objectUrl)
 ### Token Optimization
 - `SAP_ABAP_VERSION=latest` (default): ABAP version for help.sap.com documentation URLs (e.g. `latest`, `758`, `754`)
 - `DEFER_TOOLS=true` (default): Lazy load tools on demand via `find_tools(category=...)` or `find_tools(query=...)`
-- `DEFER_TOOLS=false`: Load all 59 tools upfront (higher initial token cost)
+- `DEFER_TOOLS=false`: Load all 67 tools upfront (higher initial token cost)
 - `SOURCE_CACHE_TTL_MS=30000` (default): TTL for the `getObjectSource` cache (`src/cache.ts`); `0` disables. Cache is invalidated on every successful write/delete so reads never serve stale source.
 - **Method-level edits** (`edit_abap_method`) and **contracts** (`get_abap_contract`, `analyze_abap_context(mode=contract)`) cut generation/read tokens — prefer them over full-class `write_abap_source` / `read_abap_source` when only one method or the API surface is needed.
 
@@ -130,7 +132,7 @@ All imports use `.js` extensions (e.g., `import { cfg } from "./config.js"`) as 
 
 ### Adding a New Tool
 1. Add Zod schema in `src/schemas.ts`
-2. Add tool definition in `src/tools/tool-definitions.ts` (name, description, schema)
+2. Add tool definition in `src/tools/tool-definitions.ts` (name, description, schema; set `requiresAdt: false` if the tool never touches SAP — the server then skips the ADT connection and the handler receives no usable client)
 3. Create or extend a handler in `src/tools/handlers/`
 4. Register handler in `src/tools/handler-map.ts`
 5. Add to the appropriate category in `src/tools/tool-registry.ts`

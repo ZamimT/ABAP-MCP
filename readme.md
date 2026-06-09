@@ -1,6 +1,6 @@
 # ABAP MCP Server
 
-Standalone MCP Server für agentives ABAP-Development — 66 Tools via ADT REST API.
+Standalone MCP Server für agentives ABAP-Development — 67 Tools via ADT REST API.
 
 ---
 
@@ -22,18 +22,18 @@ Die meisten ADT-Bridges sprechen nur direktes HTTPS. Dieser Server probiert vier
 - **🚀 Lokale `.abap`-Datei + Bulk-Push — 15 Minuten → Sekunden** — Andere KI-Ansätze schreiben ABAP-Code zeichenweise direkt in das ADT-System; bei einem großen Programm dauert das bis zu **15 Minuten pro Schreibvorgang**. Dieser Server arbeitet stattdessen mit einer lokalen `.abap`-Datei: der Agent editiert lokal, und `write_abap_source` pusht den vollständigen Stand in einem einzigen ADT-API-Aufruf — in **Sekunden**. Bei 10 iterativen Korrekturen sind das bis zu **150 gesparte Minuten** pro Session.
 
 - **🔁 Rekursives Coding bis zur erfolgreichen Aktivierung** — Der Write-Workflow läuft `lock → write → Syntaxcheck → aktivieren → unlock` und **aktiviert nur bei sauberem Syntaxcheck**. Schlägt etwas fehl, bekommt der Agent die konkrete Fehlerliste zurück und korrigiert iterativ weiter, bis das Objekt fehlerfrei aktiviert ist. Du erhältst aktivierten, lauffähigen Code statt eines Entwurfs mit roten Markern.
-- **🎯 Deferred Tools — ~75–80 % Token-Ersparnis** — Statt alle 59 Tools in jeden Kontext zu laden, startet der Server mit nur **18 Core-Tools**. Der Rest wird bei Bedarf über das Meta-Tool `find_tools` aktiviert (`find_tools(category=…)` oder `find_tools(query=…)`).
+- **🎯 Deferred Tools — ~75–80 % Token-Ersparnis** — Statt alle 67 Tools in jeden Kontext zu laden, startet der Server mit nur **13 Core-Tools**. Der Rest wird bei Bedarf über das Meta-Tool `find_tools` aktiviert (`find_tools(category=…)` oder `find_tools(query=…)`).
 - **✂️ Method-Level Surgery** — `read_abap_method` / `edit_abap_method` lesen bzw. ersetzen einen einzelnen `METHOD…ENDMETHOD`-Block. Der Agent gibt nicht mehr die ganze Klasse aus, um eine Methode zu ändern — der Server splittet den neuen Rumpf server-seitig in die Quelle und durchläuft den normalen Write-Workflow. Größter Token-Hebel bei iterativem Coding.
 - **🗜️ Dependency Contracts** — `get_abap_contract` (und `analyze_abap_context(mode=contract)`) komprimieren eine Klasse/Interface auf ihre öffentliche Signatur-Oberfläche ohne Methodenrümpfe — typischerweise 5–10 % der Quellgröße. So bekommt der Agent die API einer Abhängigkeit billig, bevor er dagegen codet.
 - **⚡ Source-Cache** — TTL-Cache für `getObjectSource` (`SOURCE_CACHE_TTL_MS`, Default 30 s); wiederholte Reads treffen den Cache, Writes/Deletes invalidieren automatisch — nie veralteter Quelltext nach einer Mutation.
-- **🧰 Intent-Facade** — vier konsolidierte Verben `SAPRead`/`SAPWrite`/`SAPSearch`/`SAPDiagnose` für Clients, die eine kleine Tool-Oberfläche statt 59 Einzeltools wollen. Reine Routing-Schicht — alle Safety-Guards bleiben aktiv.
+- **🧰 Intent-Facade** — vier konsolidierte Verben `SAPRead`/`SAPWrite`/`SAPSearch`/`SAPDiagnose` für Clients, die eine kleine Tool-Oberfläche statt 67 Einzeltools wollen. Reine Routing-Schicht — alle Safety-Guards bleiben aktiv.
 - **🛂 Governance (Rollen + Audit)** — Rollen `viewer`/`developer`/`admin` (`SAP_ROLE`) schränken zusätzlich zu den ALLOW_*-Flags ein; jede verändernde Aktion wird als JSON-Audit-Zeile nach STDERR (und optional `AUDIT_LOG_FILE`) protokolliert.
 - **🕸️ Impact-Analyse** — `get_call_graph` rendert den rekursiven Where-Used-Graph als Mermaid-Diagramm; `find_dead_code` markiert Objekte ohne eingehende Verwendungen als Löschkandidaten.
 - **🧠 Voller Kontext vor dem Schreiben** — `analyze_abap_context`, `where_used` und `read_abap_source(includeRelated=true)` lesen rekursiv alle verbundenen Objekte (Includes, Funktionsbausteine, Klassen), damit der Agent das gesamte Programm versteht, bevor er es anfasst.
 - **⚡ Sichere Ad-hoc-Ausführung** — `execute_abap_snippet` führt Code in einem temporären `$TMP`-Programm aus und **löscht es immer** (auch bei Laufzeitfehlern). Eine statische Verbotsliste (`COMMIT WORK`, DB-`INSERT/UPDATE/DELETE`, …) blockiert datenverändernde Operationen vorab.
 - **🛡️ Default-sichere Safety-Guards** — Schreiben, Löschen und Ausführen sind standardmäßig **deaktiviert** und müssen explizit freigeschaltet werden. Kundennamensraum-Zwang (Z/Y) und `BLOCKED_PACKAGES` schützen SAP-eigene Objekte. PROD bleibt komplett gesperrt.
 - **🔒 Concurrency-Safe** — Serieller Write-Lock und Stateful-Sessions mit automatischer Lock-Recovery verhindern Konflikte bei parallelen Schreiboperationen.
-- **📚 Integrierte SAP-Doku-Suche** — `search_sap_web` und versionsabhängige help.sap.com-Verweise (`SAP_ABAP_VERSION`) liefern dem Agenten aktuelle, korrekte Referenzen statt veraltetem Trainingswissen.
+- **📚 Integrierte SAP-Doku-Suche** — `search_sap_web`, `fetch_url` (liest beliebige URLs inkl. SPAs wie das SAP Help Portal) und versionsabhängige help.sap.com-Verweise (`SAP_ABAP_VERSION`) liefern dem Agenten aktuelle, korrekte Referenzen statt veraltetem Trainingswissen.
 
 ### Token-effizient arbeiten — Beispiele
 
@@ -88,7 +88,7 @@ Wenn alles klappt, siehst du:
   User    : <USERNAME>  Client: <CLIENT>  Lang: EN
   Write   : ❌ deaktiviert
   Delete  : ❌ deaktiviert
-  Tools   : 12 initial (66 gesamt, deferred)
+  Tools   : 13 initial (67 gesamt, deferred)
   Doku    : help.sap.com vlatest
   Prompts : 1 (abap_develop)
   ADT     : ✅ Verbunden
@@ -104,7 +104,7 @@ ein MCP-Server über die ADT REST API. Der Vergleich zeigt, wo die Unterschiede 
 
 | Feature | Dieser MCP | SAP ADT for VS Code |
 |---|---|---|
-| **Tool-Anzahl** | **66 Tools** | ~10 Capability-Kategorien |
+| **Tool-Anzahl** | **67 Tools** | ~10 Capability-Kategorien |
 | **IDE-Bindung** | Keine — jeder MCP-Client | VS Code only |
 | **Systemunterstützung** | ECC 6.0+, S/4HANA on-prem, BTP | BTP-optimiert; on-prem sekundär |
 | **Klassisches ABAP** (Programme, FuGr, BAPIs, Nachrichten) | ✅ Vollständig | ❌ Nicht geplant |
@@ -126,7 +126,7 @@ ein MCP-Server über die ADT REST API. Der Vergleich zeigt, wo die Unterschiede 
 | **RBAC-Governance** | ✅ viewer/developer/admin | ❌ |
 | **Paket-Guards + Namespace-Zwang** | ✅ | ❌ |
 | **SAProuter / BTP Proxy / HTTP Proxy** | ✅ Alle 4 Routing-Modi | BTP + direkt |
-| **Web-Suche** | ✅ `search_sap_web` (Tavily) | ❌ |
+| **Web-Suche** | ✅ `search_sap_web` + `fetch_url` (Tavily) | ❌ |
 | **Clean ABAP Lint** | ✅ `review_clean_abap` + Skill | ✅ ATC clean-core |
 | **Unit Tests** | ✅ Ausführen + Include erstellen | ✅ Generieren + Ausführen |
 | **DDIC-Feldvalidierung (Pre-Write)** | ✅ Statische Analyse vor Write | ❌ |
@@ -239,7 +239,7 @@ In VS Code öffne die Cline Settings (Cline-Symbol → Settings) und gehe zu "MC
 - `autoApprove` listet die Tools auf, die ohne Benutzerbestätigung ausgeführt werden dürfen. Erweitere die Liste nach Bedarf (z.B. `search_abap_syntax`, `validate_ddic_references`, `get_object_info`, `find_tools`).
 - `timeout`: Maximale Laufzeit pro Tool-Aufruf in Sekunden (60 empfohlen für ATC-Checks u.ä.).
 - `SAP_ALLOW_UNAUTHORIZED=true` / `NODE_TLS_REJECT_UNAUTHORIZED=0`: Nur bei Self-signed Zertifikaten (DEV-Systeme) setzen!
-- `TAVILY_API_KEY`: Optional — wird nur für das `search_sap_web` Tool benötigt. API-Key von [tavily.com](https://tavily.com) beziehen.
+- `TAVILY_API_KEY`: Optional — wird für die Tools `fetch_url` und `search_sap_web` benötigt. API-Key von [tavily.com](https://tavily.com) beziehen.
 - Alle `env`-Variablen können alternativ in einer `.env`-Datei im Server-Verzeichnis konfiguriert werden.
 
 Nach dem Speichern: Cline neu starten oder die MCP-Verbindung neu laden.
@@ -282,7 +282,7 @@ MAX_DUMPS=20
 # Writes/Deletes invalidieren automatisch.
 SOURCE_CACHE_TTL_MS=30000
 
-# Web Search (optional — für search_sap_web Tool)
+# Web Search (optional — für fetch_url & search_sap_web Tools)
 TAVILY_API_KEY=
 ```
 
