@@ -9,6 +9,7 @@ import { ADT_PACKAGES, ADT_PROGRAMS, ADT_CLASSES, ADT_INTERFACES, ADT_FUNCTION_G
 
 const encXml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 import { assertWriteEnabled, assertPackageAllowed, assertCustomerNamespace } from "../../safety.js";
+import * as fs from "fs";
 
 function ok(text: string): ToolResult { return { content: [{ type: "text", text }] }; }
 
@@ -122,18 +123,39 @@ export async function handleCreateCdsView(client: ADTClient, args: Record<string
   const url = `${ADT_DDIC_DDL_SOURCES}/${n.toLowerCase()}`;
   const responsible = client.httpClient.username.toUpperCase();
 
+  // Resolve initial source from inline string or file path.
+  // On some S/4HANA on-premise systems the DDL sources endpoint requires the
+  // CDS source code to be embedded in the creation request body as a
+  // <ddlSource:ddlSource> child element — omitting it causes a T100 validation
+  // error "System expected the element ddlSource".
+  let initialSource: string | undefined;
+  if (p.sourcePath) {
+    try {
+      initialSource = fs.readFileSync(p.sourcePath, "utf-8");
+    } catch (e) {
+      throw new Error(`Cannot read sourcePath '${p.sourcePath}': ${e instanceof Error ? e.message : String(e)}`);
+    }
+  } else if (p.source) {
+    initialSource = p.source;
+  }
+
   // abap-adt-api's createObject does not pass corrNr correctly for DDLS objects.
-  // Use direct HTTP POST (same pattern as handleCreateDatabaseTable) to guarantee corrNr is included.
+  // Use direct HTTP POST to guarantee corrNr is included.
+  // The root element for DDLS/DF MUST be ddl:ddlSource (namespace http://www.sap.com/adt/ddic/ddlsources),
+  // NOT blue:blueSource. S/4HANA on-premise systems additionally require the CDS source code to be
+  // embedded inline as a CDATA text node of the root element.
+  const sourceBody = initialSource ? `<![CDATA[${initialSource}]]>` : "";
+
   const body = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<blue:blueSource xmlns:blue="http://www.sap.com/wbobj/blue"`,
+    `<ddl:ddlSource xmlns:ddl="http://www.sap.com/adt/ddic/ddlsources"`,
     `  xmlns:adtcore="http://www.sap.com/adt/core"`,
     `  adtcore:description="${encXml(p.description)}"`,
     `  adtcore:name="${n}" adtcore:type="DDLS/DF"`,
     `  adtcore:language="EN" adtcore:masterLanguage="EN"`,
     `  adtcore:responsible="${responsible}">`,
-    `  <adtcore:packageRef adtcore:name="${p.devClass}"/>`,
-    `</blue:blueSource>`,
+    `  <adtcore:packageRef adtcore:name="${p.devClass}"/>${sourceBody}`,
+    `</ddl:ddlSource>`,
   ].join("\n");
 
   const qs: Record<string, string> = {};
@@ -159,7 +181,7 @@ export async function handleCreateCdsView(client: ADTClient, args: Record<string
     }
   }
 
-  return ok(`✅ CDS View '${n}' created\nURI: ${url}`);
+  return ok(`✅ CDS View '${n}' created\nURI: ${url}\n\nNext step:\n  write_abap_source with objectUrl='${url}' to update the source`);
 }
 
 export async function handleCreateDatabaseTable(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {

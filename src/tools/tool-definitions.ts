@@ -73,7 +73,7 @@ export const TOOLS: ToolDef[] = [
     description: "Creates a new function group. Name must start with Z or Y. ⚠️ Requires ALLOW_WRITE=true.",
     schema: S.S_CreateFunctionGroup },
   { name: "create_cds_view",
-    description: "Creates a new CDS view (DDLS). Name must start with Z or Y. ⚠️ Requires ALLOW_WRITE=true.",
+    description: "Creates a new CDS view (DDLS). Name must start with Z or Y. On S/4HANA on-premise systems pass 'sourcePath' (path to a local .cds file) or 'source' (inline CDS code) — the ADT endpoint on these systems requires the initial source in the creation request. ⚠️ Requires ALLOW_WRITE=true.",
     schema: S.S_CreateCdsView },
   { name: "create_database_table",
     description: "Creates a new transparent database table (TABL). Name must start with Z or Y. ⚠️ Requires ALLOW_WRITE=true.",

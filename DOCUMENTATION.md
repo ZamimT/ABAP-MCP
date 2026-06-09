@@ -687,10 +687,30 @@ Legt eine neue Funktionsgruppe an. Name muss mit `Z` oder `Y` beginnen (max. 26 
 
 #### `create_cds_view`
 
-Legt eine neue CDS View (DDL Source) an. Name muss mit `Z` oder `Y` beginnen.
+Legt eine neue CDS View (DDL Source, Typ `DDLS/DF`) an. Name muss mit `Z` oder `Y` beginnen.
 
-**Hinweis:** Nach dem Anlegen muss die CDS View über `write_abap_source` mit der eigentlichen  
-DDL-Definition gefüllt werden.
+**Zweistufiges Muster:** Das ADT-Backend akzeptiert keinen gemischten XML-Inhalt (CDATA +
+Kind-Elemente im selben Root). Daher zuerst den Shell anlegen, dann Quelle per
+`write_abap_source` füllen:
+
+```
+1. create_cds_view   → legt DDLS-Objekt-Shell an (kein source-Parameter nötig)
+2. write_abap_source → schreibt die CDS-DDL-Quelle (define view entity …)
+```
+
+**ADT-Technischer Hintergrund:** Der korrekte XML-Root-Namespace für DDL Sources ist
+`xmlns:ddl="http://www.sap.com/adt/ddic/ddlsources"` mit Root-Element `ddl:ddlSource`.
+Frühere Implementierungen nutzten `blue:blueSource` (korrekt für TABL/BDEF), was zu
+`"System expected the element ddlSource"` führte. Behoben in 2026-06.
+
+**Optionale Parameter:**
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|-----------|-----|---------|--------------|
+| `name` | string | ✅ | CDS View-Name (max. 30 Zeichen, Z/Y-Prefix) |
+| `description` | string | ✅ | Kurzbeschreibung (max. 40 Zeichen) |
+| `devClass` | string | ✅ | Paket, z.B. `ZLOCAL` oder `$TMP` |
+| `transport` | string | | Transportauftrag |
 
 ---
 

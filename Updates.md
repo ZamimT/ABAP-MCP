@@ -2,6 +2,35 @@
 
 ---
 
+## 2026-06-09 — Bugfix: `create_cds_view` — falscher XML-Root-Namespace
+
+### Fix: DDLS-Anlage schlug mit "System expected the element ddlSource" fehl
+
+**Problem:** `create_cds_view` nutzte `blue:blueSource` als XML-Root-Element mit Namespace
+`http://www.sap.com/adt/naming`. Das ADT-Backend lehnte die Anfrage ab:
+`"System expected the element ddlSource"`. Derselbe Root ist für TABL/BDEF korrekt, aber
+**nicht** für DDL Sources (Typ `DDLS/DF`).
+
+**Ursache:** `objectcreator.js` der `abap-adt-api`-Library verwendet für DDLS den Typ
+`rootName: "ddl:ddlSource"` und `nameSpace: 'xmlns:ddl="http://www.sap.com/adt/ddic/ddlsources"'`.
+
+**Fix:**
+- XML-Root von `<blue:blueSource …>` auf `<ddl:ddlSource …>` geändert
+- Namespace von `http://www.sap.com/adt/naming` auf `http://www.sap.com/adt/ddic/ddlsources`
+- `source`/`sourcePath`-Parameter hinzugefügt (optional); da ADT keinen gemischten XML-Inhalt
+  (CDATA + Kind-Elemente) akzeptiert, bleibt das empfohlene Muster:
+  1. `create_cds_view` → Shell anlegen
+  2. `write_abap_source` → CDS-DDL-Quelle füllen
+
+**Geänderte Dateien:**
+- `src/tools/handlers/create.ts` — `handleCreateCdsView`: Root-Element und Namespace korrigiert,
+  `import * as fs from "fs"` ergänzt, `sourcePath`/`source`-Parameter-Handling
+- `src/schemas.ts` — `S_CreateCdsView`: optionale Felder `source`, `sourcePath`
+- `src/tools/tool-definitions.ts` — Beschreibung für `create_cds_view` aktualisiert
+- `DOCUMENTATION.md` — `create_cds_view`-Abschnitt mit ADT-Hintergrund und Zweistufenmuster
+
+---
+
 ## 2026-06-02 — SAP Business Workflow-Analyse: `analyze_workflow`
 
 ### Feature: Read-only Workflow-Analyse (SWDD / klassischer WF)

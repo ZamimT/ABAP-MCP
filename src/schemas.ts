@@ -106,7 +106,9 @@ export const S_CreateCdsView = z.object({
   description: z.string().max(40).describe("Short description"),
   devClass:    z.string().describe("Package"),
   transport:   z.string().optional(),
-});
+  source:      z.string().optional().describe("Initial CDS source code (required on some on-premise systems)"),
+  sourcePath:  z.string().optional().describe("Path to a local file containing the initial CDS source (alternative to source)"),
+}).refine(d => !(d.source && d.sourcePath), { message: "Provide either source or sourcePath, not both" });
 export const S_CreateTable = z.object({
   name:        z.string().min(1).max(16).describe("Table name, must start with Z or Y"),
   description: z.string().max(40).describe("Short description"),
