@@ -105,7 +105,7 @@ ein MCP-Server über die ADT REST API. Der Vergleich zeigt, wo die Unterschiede 
 | Feature | Dieser MCP | SAP ADT for VS Code |
 |---|---|---|
 | **Tool-Anzahl** | **67 Tools** | ~10 Capability-Kategorien |
-| **IDE-Bindung** | Keine — jeder MCP-Client | VS Code only |
+| **IDE-Bindung** | Keine — jeder MCP-Client | VS Code + Eclipse (gemeinsamer ADT-Core) |
 | **Systemunterstützung** | ECC 6.0+, S/4HANA on-prem, BTP | BTP-optimiert; on-prem sekundär |
 | **Klassisches ABAP** (Programme, FuGr, BAPIs, Nachrichten) | ✅ Vollständig | ❌ Nicht geplant |
 | **SAP Business Workflow (SWDD)** | ✅ `analyze_workflow` (definitions/instances/steps/agents) | ❌ |
@@ -138,7 +138,7 @@ ein MCP-Server über die ADT REST API. Der Vergleich zeigt, wo die Unterschiede 
 
 **Fazit:** SAP hat ein schmaleres initiales Angebot (BTP-fokussiert, VS Code-only, ~10 Kategorien)
 mit einem proprietären ABAP-Modell. Dieser Server ist breiter (alle SAP-Systeme, alle ABAP-Artefakte,
-jeder MCP-Client), tiefer (65 Tools, Governance, Audit, Kontextkompression) und kostenlos.
+jeder MCP-Client), tiefer (67 Tools, Governance, Audit, Kontextkompression) und kostenlos.
 Die einzige echte Lücke ist das spezialisierte SAP-ABAP-1 Sprachmodell.
 
 ---
