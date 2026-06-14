@@ -2,6 +2,29 @@
 
 ---
 
+## 2026-06-14 — README: SAPs offizieller „ABAP MCP Server" (Q2 2026 GA) bestätigt
+
+### Recherche: Offizielle SAP-Quellen zur GA
+
+Zur Q2-2026-GA des SAP-eigenen Angebots wurden zwei offizielle Quellen ausgewertet
+([SAP Community Blog](https://community.sap.com/t5/technology-blog-posts-by-sap/entering-the-new-era-of-agentic-ai-for-abap-development/ba-p/14394643),
+[SAP News Center DE](https://news.sap.com/germany/2026/06/mit-agentic-ai-erreicht-abap-die-naechste-stufe-der-evolution/)).
+Ergebnisse in den "Vergleich"-Abschnitt der README eingearbeitet:
+
+1. **Namenskollision:** SAPs Produkt heißt offiziell ebenfalls **„ABAP MCP Server"** —
+   identisch zu diesem Projekt (`package.json` name: `abap-mcp-server`). Hinweis als
+   Warnbox im README-Vergleich ergänzt; relevant falls dieses Paket je auf npm landet.
+2. **Architektur:** SAPs Server basiert auf dem **ABAP Language Server** (IDE-unabhängige
+   Abstraktionsschicht), MCP-Schicht darüber. Eclipse + VS Code als native Clients,
+   GitHub Copilot/Amazon Q als Drittanbieter-Agenten darin — IDE-Bindung-Zeile präzisiert.
+3. **Keine Tool-/API-Referenz öffentlich:** Die granulare Vergleichstabelle (67 Tools vs.
+   ~10 Kategorien etc.) bleibt Best-Effort-Einschätzung; Quellen-Footnote ergänzt.
+
+Inhaltliche Kernaussage der Tabelle (breiter/tiefer/kostenlos, einzige Lücke
+SAP-ABAP-1-Modell) unverändert — keine neuen Gegenargumente in den Quellen gefunden.
+
+---
+
 ## 2026-06-09 — Scan Runde 6: Stillschweigend ignorierte Parameter & Schema-Lücken
 
 ### Bugfix-Cluster: Tool-Parameter, die akzeptiert aber nie ausgewertet wurden

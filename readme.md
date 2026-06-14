@@ -97,15 +97,22 @@ Wenn alles klappt, siehst du:
 
 ---
 
-## Vergleich: Dieser MCP vs. SAP ADT for VS Code (offizielles MCP)
+## Vergleich: Dieser MCP vs. SAPs offizieller „ABAP MCP Server" (Q2 2026 GA)
 
-SAP hat mit dem ADT for VS Code MCP-Server (Q2 2026 GA) ein ähnliches Konzept geliefert —
-ein MCP-Server über die ADT REST API. Der Vergleich zeigt, wo die Unterschiede liegen:
+> ⚠️ **Namenskollision:** SAPs offizielles Angebot trägt laut [SAP News Center](https://news.sap.com/germany/2026/06/mit-agentic-ai-erreicht-abap-die-naechste-stufe-der-evolution/)
+> denselben Namen wie dieses Projekt — „ABAP MCP Server". Dieses Projekt ist **kein** SAP-Produkt
+> und steht in keiner Verbindung zu SAP; der `package.json`-Name `abap-mcp-server` kollidiert
+> ggf. mit SAPs Produktnamen, falls dieses Paket je auf npm veröffentlicht wird.
 
-| Feature | Dieser MCP | SAP ADT for VS Code |
+SAP hat mit dem ABAP MCP Server (Eclipse + VS Code, Q2 2026 GA) ein ähnliches Konzept geliefert —
+ein MCP-Server, aufgesetzt auf dem ABAP Language Server (IDE-unabhängige Abstraktionsschicht für
+ABAP-Entwicklungsfunktionen). Drittanbieter-Agenten wie GitHub Copilot und Amazon Q docken darüber
+an. Der Vergleich zeigt, wo die Unterschiede liegen:
+
+| Feature | Dieser MCP | SAPs ABAP MCP Server |
 |---|---|---|
 | **Tool-Anzahl** | **67 Tools** | ~10 Capability-Kategorien |
-| **IDE-Bindung** | Keine — jeder MCP-Client | VS Code + Eclipse (gemeinsamer ADT-Core) |
+| **IDE-Bindung** | Keine — jeder MCP-Client | Eclipse + VS Code (ADT-Core); GitHub Copilot/Amazon Q als Agenten darin |
 | **Systemunterstützung** | ECC 6.0+, S/4HANA on-prem, BTP | BTP + on-prem (RFC); erster Release ABAP-Cloud-fokussiert |
 | **Klassisches ABAP** (Programme, FuGr, BAPIs, Nachrichten) | ✅ Vollständig | ❌ Noch nicht (FuGr/Programme für späteren Release geplant) |
 | **SAP Business Workflow (SWDD)** | ✅ `analyze_workflow` (definitions/instances/steps/agents) | ❌ |
@@ -136,10 +143,15 @@ ein MCP-Server über die ADT REST API. Der Vergleich zeigt, wo die Unterschiede 
 | **Enterprise SLA** | ❌ Open Source | ✅ |
 | **Lizenzkosten** | **Kostenlos** | AI Units (BTP-Subscription) |
 
-**Fazit:** SAP hat ein schmaleres initiales Angebot (BTP-fokussiert, VS Code + Eclipse, ~10 Kategorien)
+**Fazit:** SAP hat ein schmaleres initiales Angebot (BTP-fokussiert, Eclipse + VS Code, ~10 Kategorien)
 mit einem proprietären ABAP-Modell. Dieser Server ist breiter (alle SAP-Systeme, alle ABAP-Artefakte,
 jeder MCP-Client), tiefer (67 Tools, Governance, Audit, Kontextkompression) und kostenlos.
 Die einzige echte Lücke ist das spezialisierte SAP-ABAP-1 Sprachmodell.
+
+**Quellen (Stand 2026-06-14):** [SAP Community Blog – „Entering the New Era of Agentic AI for ABAP Development"](https://community.sap.com/t5/technology-blog-posts-by-sap/entering-the-new-era-of-agentic-ai-for-abap-development/ba-p/14394643) ·
+[SAP News Center DE](https://news.sap.com/germany/2026/06/mit-agentic-ai-erreicht-abap-die-naechste-stufe-der-evolution/).
+Eine vollständige Tool-/API-Referenz für SAPs ABAP MCP Server ist bisher nicht veröffentlicht —
+die Tabelle oben basiert auf den öffentlichen Ankündigungen, nicht auf einer 1:1-Tool-Liste.
 
 ---
 
@@ -393,6 +405,34 @@ Keine zusätzlichen Variablen. Falls das Backend ein selbst signiertes Zertifika
 ### Was NICHT in `SAP_URL` gehört
 - **SAProuter-Routes** (`/H/.../S/...`): SAProuter spricht SAP-NI-Binärprotokoll, nicht HTTP. Gehört in `SAP_ROUTER`.
 - **Cloud-Connector-virtual-host-only-Pfade**: das ist die `SAP_URL`. Der Pfad-Präfix-Mapping macht der Cloud Connector.
+
+---
+
+## Authentifizierung & Connectivity — unterstützte Verfahren
+
+Übersicht, welche Auth- und Connectivity-Mechanismen dieser Server abdeckt — und welche bewusst (noch) nicht, im Vergleich zu anderen ABAP-MCP-Implementierungen, die z.B. zusätzlich RFC, mTLS-Client-Zertifikate, Kerberos/SPNEGO oder den SAP BTP Destination Service mit Principal Propagation anbieten.
+
+### ✅ Unterstützt
+
+| Mechanismus | Wo greift es | Details |
+|---|---|---|
+| **Basic Auth** (User/Passwort) | ADT REST API | `SAP_USER` / `SAP_PASSWORD` — einziger Auth-Mechanismus gegen das ABAP-Backend selbst |
+| **XSUAA Client-Credentials (JWT)** | BTP Connectivity Proxy | Signiert nur den Tunnel zum Cloud Connector (`Proxy-Authorization`-Header), **nicht** die ADT-Session selbst — siehe Abschnitt „BTP Connectivity Proxy" oben |
+| **SAProuter NI-Tunnel** (optional mit Router-Passwort) | Transport-Layer | `SAP_ROUTER`, `SAP_ROUTER_PASSWORD` |
+| **HTTP-CONNECT-Proxy** | Transport-Layer | `SAP_PROXY_URL` / `HTTPS_PROXY` / `HTTP_PROXY` |
+| **Self-signed-Zertifikate** (TLS-Verifikation deaktivierbar) | ADT-Verbindung + Web-Calls | getrennt geregelt: `SAP_ALLOW_UNAUTHORIZED` (ADT) vs. `WEB_ALLOW_UNAUTHORIZED` (Tavily) |
+
+### ❌ Nicht unterstützt (Stand v2.0)
+
+| Mechanismus | Wofür man es braucht | Alternative in diesem Server |
+|---|---|---|
+| **mTLS-Client-Zertifikate** | X.509-basierte Systemauthentifizierung statt User/Passwort | Basic Auth; Netzwerk zusätzlich über VPN/SAProuter absichern |
+| **Kerberos / SPNEGO (SSO)** | Windows-AD-Integration ohne Passwort im Klartext | Basic Auth — Credentials liegen in `.env` |
+| **RFC/BAPI-Direktverbindungen** (`node-rfc`) | Funktionsbaustein-Aufrufe ohne ADT-Wrapper | `execute_abap_snippet` kann Funktionsbausteine per `CALL FUNCTION` aufrufen |
+| **SAP BTP Destination Service** (Laufzeit-Lookup, Principal Propagation) | Zentrale Credential-Verwaltung, User-Identity-Weiterleitung an das Backend | Statische `.env`-Credentials bzw. BTP-Connectivity-Service-Key (siehe Modus 1) |
+| **SSE / HTTP-MCP-Transport** | Mehrere Clients gegen einen laufenden Server-Prozess | Nur **stdio** (siehe „Warum braucht der Server keinen Port?“) — pro Client startet der MCP-Client einen eigenen Server-Prozess |
+
+Diese Lücken sind bewusste Scope-Entscheidungen für v2.0 (Fokus: Single-User-Dev-Workflow gegen ein ADT-System). Für Multi-User-/Enterprise-Szenarien mit zentraler Identity-Verwaltung wären RFC-, mTLS-, Kerberos- oder Destination-Service-Integration sinnvolle, aber eigenständige Erweiterungen.
 
 ---
 
