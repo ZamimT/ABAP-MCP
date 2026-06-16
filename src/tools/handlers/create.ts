@@ -4,7 +4,7 @@
 
 import type { ADTClient } from "abap-adt-api";
 import type { ToolResult } from "../../types.js";
-import { S_CreateProgram, S_CreateClass, S_CreateInterface, S_CreateFunctionGroup, S_CreateCdsView, S_CreateTable, S_CreateMessageClass, S_CreateCdsMetadataExtension, S_CreateServiceDefinition, S_CreateServiceBinding, S_PublishServiceBinding, S_CreateDataControlLanguage, S_CreateBehaviorDefinition } from "../../schemas.js";
+import { S_CreateProgram, S_CreateClass, S_CreateInterface, S_CreateFunctionGroup, S_CreateCdsView, S_CreateTable, S_CreateMessageClass, S_CreateCdsMetadataExtension, S_CreateServiceDefinition, S_CreateServiceBinding, S_PublishServiceBinding, S_CreateDataControlLanguage, S_CreateBehaviorDefinition, S_CreatePackage } from "../../schemas.js";
 import { ADT_PACKAGES, ADT_PROGRAMS, ADT_CLASSES, ADT_INTERFACES, ADT_FUNCTION_GROUPS, ADT_DDIC_DDL_SOURCES, ADT_DDIC_TABLES, ADT_DDIC_DDLX_SOURCES, ADT_DDIC_SRVD_SOURCES, ADT_BUSINESSSERVICES_BINDINGS, ADT_ACM_DCL_SOURCES, ADT_BO_BEHAVIORS } from "../../adt-endpoints.js";
 
 const encXml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -432,4 +432,81 @@ export async function handleCreateBehaviorDefinition(client: ADTClient, args: Re
     `     First line must be: managed; | unmanaged; | projection; | abstract; | interface;\n` +
     `  2. Use the rap-bdef skill for full BDL syntax`
   );
+}
+
+export async function handleCreatePackage(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
+  assertWriteEnabled();
+  const p = S_CreatePackage.parse(args);
+  assertPackageAllowed(p.name);
+  assertCustomerNamespace(p.name, ["Z", "Y"]);
+  const n = p.name.toUpperCase();
+  const responsible = client.httpClient.username.toUpperCase();
+  const swComp = (p.softwareComponent ?? "HOME").toUpperCase();
+  const pkgType = p.packageType ?? "development";
+  const isLocal = swComp === "LOCAL";
+
+  // abap-adt-api's createObject DOES support DEVC/K, but createBodyPackage hardcodes
+  // <adtcore:packageRef adtcore:name="YMU_RAP"/> (a leftover bug), so we build the
+  // <pak:package> payload ourselves and POST it directly — same pattern as the
+  // table/binding/BDEF handlers. A transportable package uses softwareComponent="HOME"
+  // (+ optional transport layer / corrNr); a local, non-transportable package uses
+  // softwareComponent="LOCAL" and no transport layer.
+  const superPkg = p.superPackage
+    ? `<pak:superPackage adtcore:name="${encXml(p.superPackage.toUpperCase())}"/>`
+    : `<pak:superPackage/>`;
+  // The ADT packages endpoint requires the <pak:transportLayer> element to always
+  // be present. An empty pak:name selects the "Local Developments (No Transport)"
+  // layer; a transportable package needs a real layer (e.g. Z<SID>).
+  const layerName = isLocal ? "" : (p.transportLayer ? p.transportLayer.toUpperCase() : "");
+
+  const body = [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<pak:package xmlns:pak="http://www.sap.com/adt/packages"`,
+    `  xmlns:adtcore="http://www.sap.com/adt/core"`,
+    `  adtcore:description="${encXml(p.description)}"`,
+    `  adtcore:name="${n}" adtcore:type="DEVC/K" adtcore:version="active"`,
+    `  adtcore:language="EN" adtcore:masterLanguage="EN"`,
+    `  adtcore:responsible="${responsible}">`,
+    `  <pak:attributes pak:packageType="${encXml(pkgType)}"/>`,
+    `  ${superPkg}`,
+    `  <pak:applicationComponent/>`,
+    `  <pak:transport>`,
+    `    <pak:softwareComponent pak:name="${encXml(swComp)}"/>`,
+    `    <pak:transportLayer pak:name="${encXml(layerName)}"/>`,
+    `  </pak:transport>`,
+    `  <pak:translation/>`,
+    `  <pak:useAccesses/>`,
+    `  <pak:packageInterfaces/>`,
+    `  <pak:subPackages/>`,
+    `</pak:package>`,
+  ].join("\n");
+
+  const qs: Record<string, string> = {};
+  if (!isLocal && p.transport) qs.corrNr = p.transport;
+
+  const url = `${ADT_PACKAGES}/${encodeURIComponent(n.toLowerCase())}`;
+
+  try {
+    await client.httpClient.request(ADT_PACKAGES, {
+      method: "POST",
+      headers: { "Content-Type": "application/*" },
+      qs,
+      body,
+    });
+  } catch (createErr) {
+    const errMsg = createErr instanceof Error ? createErr.message : String(createErr);
+    if (errMsg.includes("already exist") || errMsg.includes("SADT_RESOURCE/1")) {
+      throw createErr;
+    }
+    // ADT sometimes returns a non-2xx response even when the package was created.
+    try {
+      await client.objectStructure(url);
+      return ok(`✅ Package '${n}' created (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})\nURI: ${url}`);
+    } catch {
+      throw createErr;
+    }
+  }
+
+  const kind = isLocal ? "local (non-transportable)" : "transportable";
+  return ok(`✅ Package '${n}' created — ${kind}, software component ${swComp}\nURI: ${url}\n\nNext step:\n  create objects with devClass='${n}'`);
 }

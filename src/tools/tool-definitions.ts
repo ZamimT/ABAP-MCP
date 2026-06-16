@@ -99,6 +99,9 @@ export const TOOLS: ToolDef[] = [
   { name: "create_behavior_definition",
     description: "Creates a new RAP Behavior Definition (BDEF) object. The BDEF name must exactly match the root CDS entity name. Must start with Z or Y. After creation, write the BDL source (managed; / unmanaged; / projection; etc.) with write_abap_source — use the rap-bdef skill for syntax guidance. ⚠️ Requires ALLOW_WRITE=true. ⚠️ Uses direct ADT HTTP (abap-adt-api has no BDEF support).",
     schema: S.S_CreateBehaviorDefinition },
+  { name: "create_package",
+    description: "Creates a new ABAP package (DEVC). Name must start with Z or Y. softwareComponent='HOME' (default) creates a transportable package (optionally pass transportLayer and a transport/corrNr); softwareComponent='LOCAL' creates a non-transportable local package (no transport needed). Optional superPackage nests it under a parent package. ⚠️ Requires ALLOW_WRITE=true. ⚠️ Uses direct ADT HTTP (abap-adt-api's DEVC support is broken).",
+    schema: S.S_CreatePackage },
 
   // ── DELETE ──────────────────────────────────────────────────────────────
   { name: "delete_abap_object",
@@ -291,7 +294,7 @@ export const TOOLS: ToolDef[] = [
     description: "Consolidated READ verb. Delegates by 'operation': source | method | contract | info | where_used | table | table_fields | ddic | revisions | context. Pass 'args' exactly as the underlying granular tool expects. Use this when you want a small tool surface instead of the 50 granular tools.",
     schema: S.S_IntentRead },
   { name: "SAPWrite",
-    description: "Consolidated WRITE verb. Delegates by 'operation': source | method | activate | pretty_print | create_program | create_class | create_interface | create_function_group | create_cds_view | create_table | create_message_class | create_metadata_extension | create_service_definition | create_service_binding | publish_service_binding | create_dcl | create_bdef | delete. Inherits all safety guards (ALLOW_WRITE/DELETE, role, audit) from the delegate. Pass 'args' as the granular tool expects.",
+    description: "Consolidated WRITE verb. Delegates by 'operation': source | method | activate | pretty_print | create_program | create_class | create_interface | create_function_group | create_cds_view | create_table | create_message_class | create_metadata_extension | create_service_definition | create_service_binding | publish_service_binding | create_dcl | create_bdef | create_package | delete. Inherits all safety guards (ALLOW_WRITE/DELETE, role, audit) from the delegate. Pass 'args' as the granular tool expects.",
     schema: S.S_IntentWrite },
   { name: "SAPSearch",
     description: "Consolidated SEARCH verb. Delegates by 'operation': objects | source | call_graph | dead_code. Pass 'args' as the underlying tool expects.",

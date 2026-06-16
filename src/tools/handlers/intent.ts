@@ -47,6 +47,7 @@ const WRITE_OPS: Record<string, string> = {
   publish_service_binding: "publish_service_binding",
   create_dcl: "create_data_control_language",
   create_bdef: "create_behavior_definition",
+  create_package: "create_package",
   delete: "delete_abap_object",
 };
 const SEARCH_OPS: Record<string, string> = {

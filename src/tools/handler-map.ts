@@ -26,7 +26,7 @@ import {
   handleCreateFunctionGroup, handleCreateCdsView, handleCreateDatabaseTable,
   handleCreateMessageClass, handleCreateCdsMetadataExtension, handleCreateServiceDefinition,
   handleCreateServiceBinding, handlePublishServiceBinding, handleCreateDataControlLanguage,
-  handleCreateBehaviorDefinition,
+  handleCreateBehaviorDefinition, handleCreatePackage,
 } from "./handlers/create.js";
 import { handleDeleteAbapObject } from "./handlers/delete.js";
 import { handleRunUnitTests, handleCreateTestInclude } from "./handlers/test.js";
@@ -100,6 +100,7 @@ export const HANDLER_MAP: Map<string, ToolHandler> = new Map([
   ["publish_service_binding",       handlePublishServiceBinding],
   ["create_data_control_language",  handleCreateDataControlLanguage],
   ["create_behavior_definition",    handleCreateBehaviorDefinition],
+  ["create_package",                handleCreatePackage],
 
   // DELETE
   ["delete_abap_object",      handleDeleteAbapObject],

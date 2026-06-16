@@ -28,6 +28,7 @@ export const AUDIT_WRAPPED_TOOLS: ReadonlyArray<[string, AuditEvent["action"]]> 
   ["publish_service_binding",       "write"],
   ["create_data_control_language",  "write"],
   ["create_behavior_definition",    "write"],
+  ["create_package",                "write"],
   ["create_test_include",           "write"],
   ["create_transport",              "write"],
   ["abapgit_pull",                  "write"],

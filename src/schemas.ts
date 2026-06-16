@@ -157,6 +157,15 @@ export const S_CreateBehaviorDefinition = z.object({
   devClass:    z.string().describe("Package"),
   transport:   z.string().optional(),
 });
+export const S_CreatePackage = z.object({
+  name:             z.string().min(1).max(30).describe("Package name (DEVC), must start with Z or Y"),
+  description:      z.string().max(60).describe("Short description"),
+  softwareComponent: z.string().default("HOME").optional().describe("Software component: 'HOME' for a transportable package, 'LOCAL' for a non-transportable local package (default: HOME)"),
+  transportLayer:   z.string().optional().describe("Transport layer for transportable packages (omit for the system default or for LOCAL packages)"),
+  superPackage:     z.string().optional().describe("Parent (super) package name, if this should be a sub-package"),
+  packageType:      z.string().default("development").optional().describe("Package type: 'development' (default), 'structure', or 'main'"),
+  transport:        z.string().optional().describe("Transport request (corrNr) — required when creating a transportable package on systems that demand one"),
+});
 
 // --- DELETE ---
 export const S_DeleteObject = z.object({
@@ -423,7 +432,7 @@ export const S_IntentWrite = z.object({
   operation: z.string().describe(
     "What to write: source | method | activate | pretty_print | create_program | create_class | create_interface | " +
     "create_function_group | create_cds_view | create_table | create_message_class | create_metadata_extension | " +
-    "create_service_definition | create_service_binding | publish_service_binding | create_dcl | create_bdef | delete"),
+    "create_service_definition | create_service_binding | publish_service_binding | create_dcl | create_bdef | create_package | delete"),
   args: coerceArgsObject.describe("Arguments for the underlying tool (same shape as the granular tool)"),
 });
 export const S_IntentSearch = z.object({
