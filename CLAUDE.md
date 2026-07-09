@@ -55,12 +55,12 @@ npm run clean
 - **Helpers**: `src/helpers/` — JSON schema conversion, DDIC validation, documentation fetching, Clean ABAP analysis, method-splice (single-method surgery), contract (context compression)
 - **Cache**: `src/cache.ts` — TTL-bounded `getObjectSource` cache, invalidated on write/delete
 - **Audit**: `src/audit.ts` — structured JSON audit log of write/delete/execute (to stderr + optional file). write/edit/delete handlers audit internally; all other mutating tools (creates, activates, abapGit pull, transport, snippet outcome) are covered by the `withAudit` wrapper in `handler-map.ts`, driven by `AUDIT_WRAPPED_TOOLS` in `tools/mutating-tools.ts` — add new mutating tools there (the derived `MUTATING_TOOL_NAMES` set also feeds the `batch_read` blocklist; a drift-guard test enforces coverage). Guard rejections log `outcome=denied`.
-- **Connection**: Lazy-initialized single `ADTClient` instance reused across all tool calls
-- **Transport**: stdio-based MCP protocol with `@modelcontextprotocol/sdk`
+- **Connection**: Per-session `ADTClient` pool (`src/adt-client.ts`). `getClient()` returns an implicit single "default" session auto-registered from the `SAP_*` env vars — stdio/local behaviour is unchanged. Multi-user / HTTP callers use `registerSession(key, creds)` + `getClientFor(key)` so each user gets an isolated ADT login (own locks, own SAP audit identity). The network transport (proxy agent + connectivity JWT) is built once via `getSharedAgent()` and shared across all sessions; pool lifecycle helpers: `dropClientSession`, `evictIdleSessions`, `hasSession`, `sessionCount`.
+- **Transport**: stdio-based MCP protocol with `@modelcontextprotocol/sdk` (local). An HTTP/Streamable transport for hosted multi-user deployment (e.g. Cloud Foundry) is a planned add-on — see `Updates.md` 2026-06-22.
 
 ### Concurrency & Session Management
-- **Write Lock**: Serial execution of write operations (`withWriteLock()`) to prevent concurrent ADT lock conflicts
-- **Stateful Sessions**: Write workflows use stateful mode for complex lock → write → activate sequences
+- **Write Lock**: Serial execution of write operations (`withWriteLock()`) to prevent concurrent ADT lock conflicts. Currently a module-global lock — correct for the single default session; per-client (`WeakMap`-keyed) locking is the planned next step for true multi-user isolation.
+- **Stateful Sessions**: Write workflows use stateful mode for complex lock → write → activate sequences (`withStatefulSession(client, fn)` — already client-scoped)
 - **Lock Recovery**: Automatic retry logic for stale locks (drops session, full logout/login if needed)
 
 ### Tool Architecture

@@ -1,17 +1,28 @@
 /**
- * ABAP MCP Server — ADT client singleton.
+ * ABAP MCP Server — ADT client session pool.
  *
- * A single `abap-adt-api` `ADTClient` is created lazily on first use and
- * reused across all tool calls. The agent backing the underlying axios
- * transport is selected from a small ordered list of strategies:
+ * Instead of a single shared `ADTClient`, the server keeps a small pool of
+ * sessions keyed by an opaque session key (e.g. the MCP transport session id
+ * in multi-user HTTP mode). Each session owns its own `ADTClient`, logged in
+ * with that session's SAP credentials, so ADT locks, stateful lock→write→
+ * activate sequences and the SAP-side audit trail stay isolated per user.
+ *
+ * The *network transport* (proxy agent + connectivity JWT) is shared across
+ * all sessions: it authenticates the *app* to the BTP Connectivity Proxy via
+ * client_credentials and is independent of the end user. Agent strategy is
+ * selected once and memoized (the first configured one wins):
  *
  *   1. BTP Connectivity Proxy        (Cloud Connector / hybrid CAP dev)
  *   2. SAProuter NI tunnel           (B2B VPN where only SAProuter is open)
  *   3. Generic HTTP CONNECT proxy    (corporate proxy or local SSH tunnel)
  *   4. Direct HTTPS                  (optionally with self-signed tolerance)
  *
- * Only one strategy is active at a time; the first configured one wins. See
- * the `readme.md` "Network connectivity" section for the matching env vars.
+ * Local stdio mode keeps working unchanged: a single implicit "default"
+ * session is auto-registered from the SAP_* env vars on first `getClient()`.
+ * Multi-user HTTP mode calls `registerSession(key, creds)` per connection and
+ * then resolves the client via `getClientFor(key)`.
+ *
+ * See the `readme.md` "Network connectivity" section for the matching env vars.
  */
 
 import http from "http";
@@ -36,30 +47,170 @@ type AgentSpec =
   | { kind: "https"; agent: https.Agent }
   | { kind: "none" };
 
-let adtClient: ADTClient | null = null;
-let btpBundle: BtpConnectivityAgentBundle | null = null;
+/** SAP backend credentials for a single session's ADT login. */
+export interface SapCreds {
+  readonly user: string;
+  readonly password: string;
+  readonly client: string;
+  readonly language: string;
+}
+
+interface UserSession {
+  creds: SapCreds;
+  client: ADTClient | null;
+  lastUsed: number;
+}
+
+/** Session key used by the implicit single-user (stdio / local) session. */
+export const DEFAULT_SESSION_KEY = "__default__";
+
+const sessions = new Map<string, UserSession>();
+
+// The network transport is shared across every session. Memoized as a promise
+// so concurrent first-callers don't each build (and JWT-fetch) their own.
+let sharedAgentPromise: Promise<AgentSpec> | null = null;
+let sharedBtpBundle: BtpConnectivityAgentBundle | null = null;
 
 /* ============================================================ *
- * Public API                                                    *
+ * Public API — session pool                                     *
  * ============================================================ */
 
 /**
- * Return a logged-in ADT client. The first call performs the login; later
- * calls reuse the connection after a cheap HEAD-discovery liveness probe.
- * If the session has expired, a new client is created transparently.
+ * Register (or update) a session's SAP credentials under `key`. Does not log
+ * in eagerly — the login happens lazily on the next `getClientFor(key)` so
+ * callers that want to validate credentials immediately should follow up with
+ * a `getClientFor(key)` and surface any error.
+ *
+ * If the key already exists with different credentials, the old client is
+ * dropped (logged out) so the next resolve re-authenticates as the new user.
+ */
+export function registerSession(key: string, creds: SapCreds): void {
+  const existing = sessions.get(key);
+  if (existing) {
+    if (sameCreds(existing.creds, creds)) {
+      existing.lastUsed = Date.now();
+      return;
+    }
+    existing.creds = creds;
+    if (existing.client) {
+      void safeLogout(existing.client);
+      existing.client = null;
+    }
+    existing.lastUsed = Date.now();
+    return;
+  }
+  sessions.set(key, { creds, client: null, lastUsed: Date.now() });
+}
+
+/** Whether a session has been registered for `key`. */
+export function hasSession(key: string): boolean {
+  return sessions.has(key);
+}
+
+/**
+ * Resolve a logged-in ADT client for a registered session. Reuses the live
+ * connection after a cheap HEAD-discovery liveness probe; re-logs in
+ * transparently when the SAP session has expired.
+ *
+ * Throws `InvalidRequest` when no session is registered for `key` — callers
+ * must `registerSession` first (the implicit `getClient()` does this for the
+ * default session automatically).
+ */
+export async function getClientFor(key: string): Promise<ADTClient> {
+  const s = sessions.get(key);
+  if (!s) {
+    throw new McpError(
+      ErrorCode.InvalidRequest,
+      `No SAP session registered for key '${key}'. Provide SAP credentials first (MCP initialize).`,
+    );
+  }
+  if (s.client && (await isStillAlive(s.client))) {
+    s.lastUsed = Date.now();
+    return s.client;
+  }
+  s.client = null;
+
+  const agentSpec = await getSharedAgent();
+  s.client = await buildLoggedInClient(agentSpec, s.creds);
+  s.lastUsed = Date.now();
+  return s.client;
+}
+
+/**
+ * Backward-compatible single-user accessor. Auto-registers an implicit
+ * "default" session from the SAP_* env vars and returns its client — this is
+ * what the local stdio entry point and the diagnostic scripts use.
  */
 export async function getClient(): Promise<ADTClient> {
-  if (adtClient && (await isStillAlive(adtClient))) return adtClient;
-  adtClient = null;
+  if (!sessions.has(DEFAULT_SESSION_KEY)) {
+    registerSession(DEFAULT_SESSION_KEY, credsFromConfig());
+  }
+  return getClientFor(DEFAULT_SESSION_KEY);
+}
 
-  const agentSpec = await selectAgent();
-  adtClient = await buildLoggedInClient(agentSpec);
-  return adtClient;
+/** Log out and forget a single session. No-op if the key is unknown. */
+export async function dropClientSession(key: string): Promise<void> {
+  const s = sessions.get(key);
+  if (!s) return;
+  sessions.delete(key);
+  if (s.client) await safeLogout(s.client);
+}
+
+/**
+ * Evict sessions idle for longer than `maxIdleMs` (the default session is
+ * never evicted). Frees SAP backend sessions so the pool does not exhaust
+ * `rdisp/tm_max_no`. Returns the number of sessions dropped.
+ */
+export async function evictIdleSessions(maxIdleMs: number): Promise<number> {
+  const now = Date.now();
+  const stale = [...sessions.entries()].filter(
+    ([key, s]) => key !== DEFAULT_SESSION_KEY && now - s.lastUsed > maxIdleMs,
+  );
+  for (const [key] of stale) await dropClientSession(key);
+  return stale.length;
+}
+
+/** Current number of live sessions (incl. the default session if present). */
+export function sessionCount(): number {
+  return sessions.size;
 }
 
 /* ============================================================ *
- * Agent strategy selection                                      *
+ * Helpers — credentials                                         *
  * ============================================================ */
+
+function credsFromConfig(): SapCreds {
+  return { user: cfg.user, password: cfg.password, client: cfg.client, language: cfg.language };
+}
+
+function sameCreds(a: SapCreds, b: SapCreds): boolean {
+  return (
+    a.user === b.user && a.password === b.password && a.client === b.client && a.language === b.language
+  );
+}
+
+async function safeLogout(client: ADTClient): Promise<void> {
+  try {
+    await client.logout();
+  } catch (e) {
+    console.error("⚠️ logout failed:", e instanceof Error ? e.message : String(e));
+  }
+}
+
+/* ============================================================ *
+ * Agent strategy selection (shared across all sessions)         *
+ * ============================================================ */
+
+/** Build the network agent once and memoize it; reset on failure to retry. */
+function getSharedAgent(): Promise<AgentSpec> {
+  if (!sharedAgentPromise) {
+    sharedAgentPromise = selectAgent().catch((e) => {
+      sharedAgentPromise = null; // allow a later call to retry the selection
+      throw e;
+    });
+  }
+  return sharedAgentPromise;
+}
 
 async function selectAgent(): Promise<AgentSpec> {
   if (cfg.btpConnectivityProxy) return buildBtpConnectivityAgent();
@@ -78,7 +229,7 @@ async function buildBtpConnectivityAgent(): Promise<AgentSpec> {
       "or SAP_BTP_CONNECTIVITY_CLIENT_ID / _CLIENT_SECRET / _TOKEN_URL.",
     );
   }
-  btpBundle = createBtpConnectivityAgentBundle(
+  sharedBtpBundle = createBtpConnectivityAgentBundle(
     {
       proxyUrl: cfg.btpConnectivityProxy,
       creds,
@@ -89,16 +240,16 @@ async function buildBtpConnectivityAgent(): Promise<AgentSpec> {
     cfg.url,
   );
   // Pre-fetch the JWT so the first proxy request carries Proxy-Authorization.
-  await btpBundle.tokenSource.get();
+  await sharedBtpBundle.tokenSource.get();
   if (cfg.btpConnectivityDebug) {
     console.error(
-      `[btp-connectivity] using ${btpBundle.scheme.toUpperCase()} forward proxy at ` +
+      `[btp-connectivity] using ${sharedBtpBundle.scheme.toUpperCase()} forward proxy at ` +
       `${cfg.btpConnectivityProxy} for target ${cfg.url}`,
     );
   }
-  return btpBundle.scheme === "https"
-    ? { kind: "https", agent: btpBundle.agent as https.Agent }
-    : { kind: "http", agent: btpBundle.agent as http.Agent };
+  return sharedBtpBundle.scheme === "https"
+    ? { kind: "https", agent: sharedBtpBundle.agent as https.Agent }
+    : { kind: "http", agent: sharedBtpBundle.agent as http.Agent };
 }
 
 function buildSAProuterAgent(): AgentSpec {
@@ -143,12 +294,12 @@ function resolveFirstHop(raw: string): SAProuterHop {
  * Client construction & maintenance                             *
  * ============================================================ */
 
-async function buildLoggedInClient(agentSpec: AgentSpec): Promise<ADTClient> {
+async function buildLoggedInClient(agentSpec: AgentSpec, creds: SapCreds): Promise<ADTClient> {
   const options: ClientOptions & { httpAgent?: http.Agent } = { keepAlive: true };
   if (agentSpec.kind === "https") options.httpsAgent = agentSpec.agent;
   if (agentSpec.kind === "http") options.httpAgent = agentSpec.agent;
 
-  const client = new ADTClient(cfg.url, cfg.user, cfg.password, cfg.client, cfg.language, options);
+  const client = new ADTClient(cfg.url, creds.user, creds.password, creds.client, creds.language, options);
 
   if (agentSpec.kind === "http") patchAxiosHttpAgent(client, agentSpec.agent);
 

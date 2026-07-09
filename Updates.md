@@ -2,6 +2,70 @@
 
 ---
 
+## 2026-06-22 — ADT-Client: Singleton → Session-Pool (Fundament für Multi-User / Cloud Foundry)
+
+### Hintergrund
+
+Für einen gehosteten Betrieb (z. B. als HTTP-MCP auf SAP BTP Cloud Foundry) muss der
+Server **mehrere Nutzer gleichzeitig** bedienen, ohne dass sich deren ADT-Sessions,
+Sperren und Audit-Identitäten vermischen. Der bisherige globale Singleton-`ADTClient`
+(eine SAP-Session für alle) verhinderte das: parallele Writes verschiedener Nutzer
+hätten denselben SAP-Login geteilt, Lock-Konflikte und falsche SE03-Sperreigentümer
+inklusive. Gewähltes Identitätsmodell: **Pro-User-SAP-Credentials** (jeder Nutzer
+loggt sich mit eigenem `SAP_USER`/`SAP_PASSWORD` ein).
+
+### Technische Umsetzung (`src/adt-client.ts`)
+
+Aus dem Modul-globalen `let adtClient` wurde ein **keyed Session-Pool**
+(`Map<sessionKey, { creds, ADTClient, lastUsed }>`):
+
+1. **Geteilter Transport:** `selectAgent()` (Proxy-Agent + Connectivity-JWT) wird jetzt
+   einmalig über `getSharedAgent()` gebaut und **memoized** (Promise-basiert gegen
+   Races beim parallelen Erstkontakt; Reset bei Fehler für Retry). Der JWT
+   authentifiziert die *App* am Connectivity-Proxy (`client_credentials`), nicht den
+   Enduser — darf also geteilt bleiben. Pro Nutzer unterscheidet sich nur die
+   SAP-Basic-Auth.
+2. **Login parametrisiert:** `buildLoggedInClient(agentSpec, creds)` nutzt die
+   Session-Credentials (`SapCreds`) statt fest `cfg.user`/`cfg.password`.
+3. **Neue Pool-API:**
+   - `registerSession(key, creds)` — Credentials ablegen; bei geänderten Creds wird der
+     alte Client ausgeloggt, damit der nächste Resolve neu authentifiziert.
+   - `getClientFor(key)` — eingeloggten Client holen (HEAD-Liveness-Probe, transparenter
+     Re-Login bei abgelaufener Session). Unbekannter Key wirft `InvalidRequest` (kein
+     Fallback auf Config-Creds → User-Isolation bleibt gewahrt).
+   - `dropClientSession(key)` — `logout()` + entfernen (Session-Ende).
+   - `evictIdleSessions(maxIdleMs)` — idle Sessions räumen (schützt das Backend-Limit
+     `rdisp/tm_max_no`); die Default-Session ist ausgenommen.
+   - `hasSession` / `sessionCount` — Status-Helfer.
+
+### Rückwärtskompatibilität (stdio/lokal unverändert)
+
+`getClient()` bleibt erhalten und registriert beim ersten Aufruf lazy eine implizite
+**Default-Session** aus den `SAP_*`-Env-Vars. `server.ts`, `index.ts` und die
+`scripts/`-Diagnosen rufen weiterhin `getClient()` und laufen ohne Änderung. Der
+globale `withWriteLock` serialisiert weiterhin korrekt diese eine Default-Session.
+
+### Status / nächste Schritte (noch offen)
+
+- `concurrency.ts`: `withWriteLock` von global auf `WeakMap<ADTClient,…>` umstellen
+  (`withWriteLock(client, fn)`) — für echte Pro-User-Parallelität.
+- `server.ts`: im HTTP-Modus `getClientFor(extra.sessionId)` statt `getClient()`.
+- Neuer `src/http-entry.ts`: Streamable-HTTP-Transport, Credentials-Erfassung beim
+  `initialize`, Idle-Eviction-Timer, `onclose → dropClientSession`.
+
+### Geänderte Dateien
+
+- `src/adt-client.ts` — Singleton → Session-Pool, geteilter memoized Agent, neue API.
+- `CLAUDE.md`, `DOCUMENTATION.md`, `readme.md` — Architektur-/Concurrency-Abschnitte
+  auf den Session-Pool aktualisiert.
+
+### Tests
+
+`npm run build` grün, `npm test` grün (77/77) — rein additive/kompatible Änderung,
+keine bestehenden Aufrufer betroffen.
+
+---
+
 ## 2026-06-14 — README: SAPs offizieller „ABAP MCP Server" (Q2 2026 GA) bestätigt
 
 ### Recherche: Offizielle SAP-Quellen zur GA

@@ -95,7 +95,14 @@ Claude / MCP Client
 ```
 
 Der Server läuft lokal und kommuniziert über **stdio** mit dem MCP-Client.
-Die SAP-Verbindung wird einmalig beim Start aufgebaut (Lazy Init) und dann wiederverwendet.
+Die SAP-Verbindung wird beim ersten Bedarf aufgebaut (Lazy Init) und wiederverwendet.
+Intern verwaltet `src/adt-client.ts` einen **Session-Pool**: lokal/stdio läuft alles
+über eine implizite „Default"-Session aus den `SAP_*`-Variablen (`getClient()`); für
+einen gehosteten Mehrbenutzer-Betrieb (HTTP/Cloud Foundry) kann pro Nutzer eine eigene
+Session mit eigenen SAP-Credentials registriert werden (`registerSession` +
+`getClientFor`), sodass ADT-Login, Sperren und Audit-Identität je Nutzer isoliert sind.
+Der Netzwerk-Transport (Proxy-Agent + Connectivity-JWT) wird einmalig gebaut und über
+alle Sessions geteilt.
 
 ---
 
@@ -1923,7 +1930,7 @@ Safety-Guards (ALLOW_*-Flags, Rolle, BLOCKED_PACKAGES, Namespace).
 - **Short Dumps / Traces**: Nur verfügbar auf NW >= 7.52; auf älteren Systemen gibt `get_short_dumps` eine Fehlermeldung zurück.
 - **abapGit Pull**: Erfordert dass abapGit im System installiert ist und der User abapGit-Berechtigung hat.
 - **Debugger**: Der ABAP-Debugger ist nicht per MCP steuerbar — das ist eine VS Code-spezifische Funktion.
-- **Gleichzeitige Locks**: Der Server hält nur eine ADT-Session. Bei parallelen Write-Operationen können Lock-Konflikte entstehen.
+- **Gleichzeitige Locks**: Im lokalen stdio-Betrieb hält der Server eine ADT-Session (Default-Session); ein globaler Write-Lock serialisiert parallele Schreiboperationen. Der Session-Pool (`src/adt-client.ts`) erlaubt zusätzlich Sessions pro Nutzer — echte Pro-Nutzer-Parallelität (Write-Lock pro Client) ist als nächster Schritt vorgesehen (siehe `Updates.md` 2026-06-22).
 
 ---
 
