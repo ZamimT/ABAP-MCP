@@ -19,6 +19,10 @@ When working in this repository, read the relevant Markdown skill files before c
 | HANA, SQLScript, AMDP, DDIC/table access | `.agent-skills/sap-hana-sqlscript/SKILL.md` |
 | External APIs, OData, integration design | `.agent-skills/sap-api-integration-style/SKILL.md` |
 | Datasphere / AI Core / Cloud SDK adjacent work | `.agent-skills/sap-cloud-adjacent/SKILL.md` |
+| Deciding whether to merge/reference another SAP MCP | `.agent-skills/sap-mcp-ecosystem/SKILL.md` |
+| Clean Core / released object / ABAP Cloud compatibility | `.agent-skills/sap-clean-core-released-objects/SKILL.md` |
+| Offline ABAP lint/review without live SAP access | `.agent-skills/offline-abap-analysis/SKILL.md` |
+| Read-only OData discovery/metadata/smoke testing | `.agent-skills/sap-odata-readonly/SKILL.md` |
 
 Claude Code can also load mirrored native skills from `.claude/skills/*/SKILL.md`. The `.agent-skills` copies are the source of truth for all agents.
 
