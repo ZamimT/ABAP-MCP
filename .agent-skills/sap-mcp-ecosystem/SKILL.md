@@ -55,15 +55,19 @@ Use this skill when:
 | Area | Repo | Use |
 |---|---|---|
 | SAP MCP catalog | `marianfoo/sap-ai-mcp-servers` | Watch new SAP MCPs/skills |
+| SAP documentation | `marianfoo/mcp-sap-docs`, `marianfoo/abap-mcp-server`, `marianfoo/abap-docs` | SAP docs, ABAP/RAP docs, feature matrix, community search, local doc indexes |
+| SAP API evidence | `marianfoo/sap-mcp-servers`, `marianfoo/sap-api-policy-skill` | API Hub, SAP Notes, Road Map, confidence-rated API policy evidence |
+| Enterprise ADT options | `marianfoo/vibing-steampunk`, `marianfoo/openadt` | ADT governance, HTTP transport, package/transport controls, SNC/SSO/JCo options |
 | Clean Core / released objects | `ClementRingot/ROSA` | Released API/object guidance |
-| ABAP translations | `ClementRingot/LISA` | Translation/i18n workflows |
+| ABAP translations | `marianfoo/LISA`, `ClementRingot/LISA` | Translation/i18n workflows |
 | Offline ABAP analysis | `palimkarakshay/abap-mcp` | abaplint, ABAP Cloud readiness |
-| OData/S/4 services | `lemaiwo/btp-sap-odata-to-mcp-server`, `Nidhideep/sap-s4-mcp-server` | OData discovery/metadata/query ideas |
+| OData/S/4 services | `marianfoo/odata-mcp-proxy`, `lemaiwo/btp-sap-odata-to-mcp-server`, `Nidhideep/sap-s4-mcp-server` | OData discovery/metadata/query ideas |
 | HANA | `HatriGt/hana-mcp-server` | Direct HANA schema/query MCP |
-| CAP | `gavdilabs/cap-mcp-plugin` | Generate MCP surfaces from CAP services |
+| CAP | `gavdilabs/cap-mcp-plugin`, `marianfoo/cap-mcp-plugin` | Generate MCP surfaces from CAP services |
 | Datasphere | `MarioDeFelipe/sap-datasphere-mcp` | Datasphere metadata/analytics APIs |
 | BTP/CF admin | `marianfoo/btp-cf-mcp` | BTP account and Cloud Foundry inspection |
-| CPI | `SathiyabalanSengodan/btp-is-ci-mcp-server` | Cloud Integration OData APIs |
+| Cloud ALM | `marianfoo/calmcp` | Read-only Cloud ALM tasks, defects, features, projects, analytics |
+| CPI | `SathiyabalanSengodan/btp-is-ci-mcp-server`, `marianfoo/odata-mcp-proxy` | Cloud Integration OData APIs |
 | SuccessFactors | `aiadiguru2025/sf-mcp` | SuccessFactors OData MCP |
 
 ## Integration Rules

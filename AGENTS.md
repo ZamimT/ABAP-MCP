@@ -23,6 +23,10 @@ When working in this repository, read the relevant Markdown skill files before c
 | Clean Core / released object / ABAP Cloud compatibility | `.agent-skills/sap-clean-core-released-objects/SKILL.md` |
 | Offline ABAP lint/review without live SAP access | `.agent-skills/offline-abap-analysis/SKILL.md` |
 | Read-only OData discovery/metadata/smoke testing | `.agent-skills/sap-odata-readonly/SKILL.md` |
+| Grounded SAP docs, ABAP feature matrix, SAP Community evidence | `.agent-skills/sap-documentation-search/SKILL.md` |
+| SAP API policy/evidence, API Hub, Notes, Road Map | `.agent-skills/sap-api-evidence-policy/SKILL.md` |
+| Enterprise ADT alternatives, SSO/SNC/JCo, transport/package governance | `.agent-skills/abap-adt-enterprise-options/SKILL.md` |
+| ABAP translations/i18n/text pools/message texts | `.agent-skills/abap-i18n-translation/SKILL.md` |
 
 Claude Code can also load mirrored native skills from `.claude/skills/*/SKILL.md`. The `.agent-skills` copies are the source of truth for all agents.
 
