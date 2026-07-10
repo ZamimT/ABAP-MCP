@@ -97,6 +97,71 @@ Wenn alles klappt, siehst du:
 
 ---
 
+## Agent Skills, Schwester-MCPs und Read-only Roadmap
+
+Dieses Repository enthält zusätzlich zur MCP-Server-Implementierung eine portable Agent-Guidance-Schicht für Codex, Claude Code, Hermes, OpenCode, Cursor/Cline und andere coding agents:
+
+| Pfad | Zweck |
+|---|---|
+| [`AGENTS.md`](./AGENTS.md) | Einstiegspunkt für coding agents: welche lokalen Skills je nach Aufgabe zu lesen sind |
+| [`.agent-skills/`](./.agent-skills/) | Source of Truth für portable Skills, unabhängig vom Agent-Anbieter |
+| [`.claude/skills/`](./.claude/skills/) | Claude-Code-Shims, die auf die portablen `.agent-skills` verweisen |
+| [`docs/read-only-tool-roadmap.md`](./docs/read-only-tool-roadmap.md) | sichere Reihenfolge für spätere read-only Tool-Implementierungen |
+
+### Warum diese Schicht existiert
+
+ABAP-MCP bleibt bewusst auf ABAP/ADT-Entwicklung fokussiert: Repository-Objekte, RAP/CDS, Transports, Checks, Clean ABAP, Dokumentation und sichere Entwicklungs-Workflows. Andere SAP-Domänen — HANA, Datasphere, CAP, CPI, SuccessFactors, BTP/Cloud Foundry Administration, Cloud ALM oder i18n-Services — haben eigene Auth-, Daten- und Sicherheitsgrenzen. Sie werden daher als **Schwester-MCPs** referenziert, statt blind in diesen Server kopiert zu werden.
+
+### Aktuelle Skill-Abdeckung
+
+Die wichtigsten Skills sind:
+
+- `abap-mcp-development` — Arbeiten am Server selbst: Schemas, Tool-Definitionen, Handler, Safety, Tests
+- `clean-abap-workflow` — Clean ABAP, DDIC-Validierung, Syntaxcheck, Review vor Writes
+- `sap-btp-connectivity` — BTP Connectivity Proxy, Cloud Connector, SAProuter, HTTP Proxy, TLS
+- `sap-rap-fiori` — CDS, RAP, BDEF, Service Definition/Binding, Fiori Exposure
+- `sap-hana-sqlscript` — DDIC, HANA/AMDP/SQLScript-nahe Analyse, safe SELECT-Regeln
+- `sap-api-integration-style` — API/OData/Integration Design und Clean-Core-orientierte Verträge
+- `sap-mcp-ecosystem` — Entscheidung: in ABAP-MCP integrieren oder Schwester-MCP nutzen
+- `sap-clean-core-released-objects` — released objects, ABAP Cloud readiness, ROSA/Cloudification-Repository-Ideen
+- `offline-abap-analysis` — abaplint/offline Review ohne SAP-System
+- `sap-odata-readonly` — OData Discovery, `$metadata`, Value Help und read-only Smoke Tests
+- `sap-documentation-search` — SAP Docs, ABAP Feature Matrix, SAP Community Evidence
+- `sap-api-evidence-policy` — API Hub, SAP Notes, Road Map, confidence-rated API Policy Evidence
+- `abap-adt-enterprise-options` — vsp/OpenADT-Vergleich, SSO/SNC/JCo, Transport-/Package-Governance
+- `abap-i18n-translation` — ABAP Übersetzungen, Text Pools, Message Classes, LISA als Schwester-MCP
+
+### Schwester-MCP-Strategie
+
+Diese Repos sind nützlich, bleiben aber standardmäßig außerhalb des ABAP-MCP-Kerns:
+
+| Domäne | Schwester-MCP / Referenz | Warum separat? |
+|---|---|---|
+| SAP Docs / ABAP Docs | `marianfoo/mcp-sap-docs`, `marianfoo/abap-mcp-server`, `marianfoo/abap-docs` | Doku-/Index-Backend, keine ADT-Mutation |
+| API Hub / Notes / Road Map | `marianfoo/sap-mcp-servers`, `marianfoo/sap-api-policy-skill` | SAP-login/evidence boundary |
+| Enterprise ADT | `marianfoo/vibing-steampunk`, `marianfoo/openadt` | andere Runtime/Auth-Stacks, SSO/SNC/JCo |
+| HANA | `HatriGt/hana-mcp-server` | direkter DB-Zugriff, eigene Credentials, Datenrisiko |
+| Datasphere | `MarioDeFelipe/sap-datasphere-mcp` | eigene Plattform/API/Auth |
+| CAP | `gavdilabs/cap-mcp-plugin`, `marianfoo/cap-mcp-plugin` | CAP App Runtime statt ABAP ADT |
+| BTP/CF Ops | `marianfoo/btp-cf-mcp` | Account-/Cloud-Foundry-Administration |
+| Cloud ALM | `marianfoo/calmcp` | ALM Tasks/Defects/Analytics, eigene API |
+| CPI / Integration Suite | `marianfoo/odata-mcp-proxy`, `btp-is-ci-mcp-server` | Integration Runtime und Deployment-Risiko |
+| SuccessFactors | `aiadiguru2025/sf-mcp` | HR/PII-Daten, eigene Security Boundary |
+| ABAP i18n | `marianfoo/LISA` | Übersetzungsservice + ABAP HTTP Service/XCO i18n APIs |
+
+### Spätere read-only Tool-Implementierungen
+
+Neue Fähigkeiten sollen zuerst **read-only** oder **offline** entstehen. Die Roadmap priorisiert:
+
+1. Dokumentation und Evidence: `docs_search_sap`, `docs_fetch`, `abap_feature_matrix`, `sap_community_search`, `sap_note_search`, `api_hub_lookup`
+2. Offline ABAP Checks: `abap_lint_source`, `scan_abapgit_export`, `check_abap_cloud_readiness_offline`
+3. Clean Core Checks: `check_released_object`, `find_clean_core_alternative`, `explain_clean_core_violation`
+4. OData read-only Verification: `odata_discover_services`, `odata_get_metadata`, `odata_list_entity_sets`, `odata_query_entity_readonly`, `odata_get_value_help`
+
+Für Details und Guardrails siehe [`docs/read-only-tool-roadmap.md`](./docs/read-only-tool-roadmap.md).
+
+---
+
 ## Vergleich: Dieser MCP vs. SAPs offizieller „ABAP MCP Server" (Q2 2026 GA)
 
 > ⚠️ **Namenskollision:** SAPs offizielles Angebot trägt laut [SAP News Center](https://news.sap.com/germany/2026/06/mit-agentic-ai-erreicht-abap-die-naechste-stufe-der-evolution/)
