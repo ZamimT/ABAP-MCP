@@ -8,7 +8,9 @@ dist/
 .env
 
 # Claude Code local config (may contain credentials)
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 
 # IDE
 .vscode/
