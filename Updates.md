@@ -2,6 +2,61 @@
 
 ---
 
+## 2026-07-10 — Transport-Wiederverwendung statt „Generated Request"-Flut
+
+### Hintergrund
+
+Beim Anlegen/Schreiben ohne expliziten Transport (und mit leerem `DEFAULT_TRANSPORT`)
+legte die CTS-Aufzeichnung für **jedes** Objekt einen neuen „Generated Request for
+Change Recording" an. Eine Objektserie (z. B. eine ganze RAP-App) landete so über
+viele Ein-Objekt-Requests verstreut. Konkreter Fall: 26 `ZCL_ZAUTH_*`-Klassen in
+Paket `ZAUTH` waren auf 4 Requests fragmentiert (1 App-Request + 3 Auto-Requests).
+
+### Ursache (geprüft)
+
+`create.ts` / `write-workflow.ts` nahmen den Transport nur aus
+`p.transport ?? cfg.defaultTransport`. War beides leer, entschied die CTS-Aufzeichnung
+und legte einen neuen Request an. Ein bestehender offener Request wurde **nur reaktiv**
+über die Lock-Fehlermeldung erkannt, **nie proaktiv vorher**.
+
+### Technische Umsetzung
+
+- **Neuer Resolver** `src/helpers/transport-resolve.ts` (`resolveTransport`) mit
+  Präzedenz: explizit → `DEFAULT_TRANSPORT` → **Session-Klebrigkeit pro Paket** →
+  Lock-Request des Objekts (`transportInfo.LOCKS`) → **bester offener Kandidat** aus
+  `transportInfo.TRANSPORTS` → sonst Legacy (ADT entscheidet).
+  - **Kandidatenauswahl:** ADT liefert `TRANSPORTS` *neueste zuerst* — naives `[0]`
+    würde ausgerechnet den jüngsten Auto-Junk-Request wählen. Stattdessen wird der
+    Kandidat gewählt, der **bereits die meisten Objekte desselben Pakets** enthält
+    (best-effort via E070/E071/TADIR-Query; robuster Fallback auf neuesten Kandidaten).
+  - **Klebrigkeit:** Der einmal gewählte Request wird pro Paket je Session gemerkt
+    (`WeakMap<ADTClient, …>`), sodass eine Create-Serie geschlossen in *einen* Request
+    läuft. Nur Requests des aktuellen Users (änderbar, Workbench `K`) kommen infrage.
+- **Integration:** `writeWorkflow` (deckt `write_abap_source` + `edit_abap_method` ab)
+  und 12 `create_*`-Handler (Program, Class inkl. behaviorPool, Interface,
+  Function Group, CDS View, Table, Message Class, CDS MDE, Service Definition/Binding,
+  DCL, Behavior Definition). Die gewählte Wiederverwendung wird transparent in der
+  Erfolgsmeldung/Log ausgewiesen (`♻️ Reusing …`).
+- **Neues Flag** `REUSE_OPEN_TRANSPORT=true` (Default). Auf `false` setzen für das
+  alte Verhalten. `DEFAULT_TRANSPORT` hat weiterhin Vorrang und schaltet die Heuristik
+  effektiv aus (deterministisch).
+
+### Geänderte Dateien
+
+`src/config.ts`, `src/helpers/transport-resolve.ts` (neu), `src/write-workflow.ts`,
+`src/tools/handlers/create.ts`, `test/transport-resolve.test.ts` (neu, 6 Tests),
+`.env.example`, `readme.md`, `DOCUMENTATION.md`, `CLAUDE.md`.
+
+### Nicht abgedeckt (bewusst)
+
+Das **physische Umhängen** bereits fragmentierter Objekte kann der MCP nicht: die
+`abap-adt-api` bietet kein Reassign, `execute_abap_snippet` ist auf diesem System
+deaktiviert. Bestehende Streu-Requests werden weiterhin in SE09/SE10 („Umhängen") oder
+per `create_transport` + manuellem Zusammenführen konsolidiert. Der Fix verhindert
+**neue** Fragmentierung.
+
+---
+
 ## 2026-06-22 — ADT-Client: Singleton → Session-Pool (Fundament für Multi-User / Cloud Foundry)
 
 ### Hintergrund

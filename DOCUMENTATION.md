@@ -156,7 +156,8 @@ cp .env.example .env
 | `ALLOW_DELETE` | | `false` | Löschen aktivieren. Zusätzlich zu ALLOW_WRITE |
 | `ALLOW_EXECUTE` | | `false` | `execute_abap_snippet` aktivieren. Zusätzlich zu ALLOW_WRITE |
 | `BLOCKED_PACKAGES` | | `SAP,SHD` | Kommaliste gesperrter Paket-Präfixe |
-| `DEFAULT_TRANSPORT` | | — | Standard-Transport wenn nicht angegeben |
+| `DEFAULT_TRANSPORT` | | — | Standard-Transport wenn nicht angegeben (hat Vorrang vor `REUSE_OPEN_TRANSPORT`) |
+| `REUSE_OPEN_TRANSPORT` | | `true` | Ohne expliziten Transport + leerem `DEFAULT_TRANSPORT`: bestehenden offenen Request des Objekts/Pakets wiederverwenden statt pro Objekt einen neuen „Generated Request" anzulegen. `false` = altes Verhalten |
 | `SYNTAX_CHECK_BEFORE_ACTIVATE` | | `true` | Syntaxcheck vor Aktivierung erzwingen |
 | `MAX_DUMPS` | | `20` | Maximale Anzahl Short Dumps |
 | `SAP_ABAP_VERSION` | | `latest` | ABAP-Version für help.sap.com Dokumentation (z.B. `latest`, `758`, `754`) |

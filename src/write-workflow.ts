@@ -8,6 +8,7 @@ import { isAdtError } from "abap-adt-api";
 import { withWriteLock, withStatefulSession } from "./concurrency.js";
 import { resolveMainProgram, resolveSyntaxContext } from "./helpers/resolve.js";
 import { validateDdicReferencesInternal } from "./helpers/ddic-validation.js";
+import { resolveTransport } from "./helpers/transport-resolve.js";
 import { invalidateSource } from "./cache.js";
 
 export function formatActivationMessages(messages: ActivationResultMessage[]): string[] {
@@ -46,6 +47,15 @@ export async function writeWorkflow(
     const log: string[] = [];
     let lockHandle: string | undefined;
     try {
+      // Prefer an already-open request over an ADT-auto-created one so that a
+      // create/write burst doesn't scatter objects across many one-off requests.
+      if (!transport) {
+        const resolved = await resolveTransport(client, objectUrl, undefined, undefined);
+        if (resolved.transport) {
+          transport = resolved.transport;
+          if (resolved.note) log.push(resolved.note);
+        }
+      }
       // Phase 1: lock → write → unlock (stateful session needed for lock/write)
       log.push(`🔒 Locking: ${lockUrl}`);
       // Direct lock — withStatefulSession already manages the session

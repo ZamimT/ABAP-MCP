@@ -121,6 +121,12 @@ export const cfg = Object.freeze({
   allowExecute: bool("ALLOW_EXECUTE"),
   blockedPackages: list("BLOCKED_PACKAGES", "SAP,SHD"),
   defaultTransport: str("DEFAULT_TRANSPORT"),
+  // When no transport is passed explicitly and DEFAULT_TRANSPORT is empty,
+  // reuse an already-open request for the object/package instead of letting
+  // ADT auto-create a new "Generated Request for Change Recording" per object.
+  // Prevents transport fragmentation during a create/write burst. Set to false
+  // to restore the legacy behaviour (ADT decides / auto-creates).
+  reuseOpenTransport: bool("REUSE_OPEN_TRANSPORT", true),
   syntaxCheckBeforeActivate: bool("SYNTAX_CHECK_BEFORE_ACTIVATE", true),
 
   // ── Operational ───────────────────────────────────────────────

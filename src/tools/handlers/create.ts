@@ -9,7 +9,24 @@ import { ADT_PACKAGES, ADT_PROGRAMS, ADT_CLASSES, ADT_INTERFACES, ADT_FUNCTION_G
 
 const encXml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 import { assertWriteEnabled, assertPackageAllowed, assertCustomerNamespace } from "../../safety.js";
+import { resolveTransport } from "../../helpers/transport-resolve.js";
 import * as fs from "fs";
+
+/**
+ * Resolve which transport a create_* handler should record into: caller's
+ * explicit value, else an already-open request for the package (reuse), else
+ * undefined (ADT decides). Returns the transport plus an optional note line to
+ * append to the success message so the reuse decision is transparent.
+ */
+async function transportFor(
+  client: ADTClient,
+  objectUrl: string,
+  devClass: string,
+  explicit?: string,
+): Promise<{ transport?: string; note: string }> {
+  const r = await resolveTransport(client, objectUrl, devClass, explicit);
+  return { transport: r.transport, note: r.note ? `\n${r.note}` : "" };
+}
 
 function ok(text: string): ToolResult { return { content: [{ type: "text", text }] }; }
 
@@ -20,10 +37,11 @@ export async function handleCreateAbapProgram(client: ADTClient, args: Record<st
   assertCustomerNamespace(p.name, ["Z", "Y"]);
   const n = p.name.toUpperCase();
   const progType = p.programType ?? "P";
-  await client.createObject(`PROG/${progType}`, n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, p.transport || undefined);
   const url = `${ADT_PROGRAMS}/${n.toLowerCase()}`;
+  const tr = await transportFor(client, url, p.devClass, p.transport);
+  await client.createObject(`PROG/${progType}`, n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, tr.transport);
   const label = progType === "I" ? "Include" : "Program";
-  return ok(`✅ ${label} '${n}' created\nURI: ${url}\n\nNext steps:\n  write_abap_source with objectUrl='${url}'`);
+  return ok(`✅ ${label} '${n}' created${tr.note}\nURI: ${url}\n\nNext steps:\n  write_abap_source with objectUrl='${url}'`);
 }
 
 export async function handleCreateAbapClass(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -35,6 +53,7 @@ export async function handleCreateAbapClass(client: ADTClient, args: Record<stri
   const url = `${ADT_CLASSES}/${n.toLowerCase()}`;
   const classCategory = p.classCategory ?? "generalObjectType";
   const responsible = client.httpClient.username.toUpperCase();
+  const tr = await transportFor(client, url, p.devClass, p.transport);
 
   // For behaviorPool classes, use a direct HTTP POST with class:category attribute.
   // client.createObject() does not support setting the class category.
@@ -53,7 +72,7 @@ export async function handleCreateAbapClass(client: ADTClient, args: Record<stri
       `</class:abapClass>`,
     ].join("\n");
     const qs: Record<string, string> = {};
-    if (p.transport) qs.corrNr = p.transport;
+    if (tr.transport) qs.corrNr = tr.transport;
     try {
       await client.httpClient.request(ADT_CLASSES, { method: "POST", headers: { "Content-Type": "application/*" }, qs, body });
     } catch (createErr) {
@@ -61,14 +80,14 @@ export async function handleCreateAbapClass(client: ADTClient, args: Record<stri
       if (errMsg.includes("already exist") || errMsg.includes("SADT_RESOURCE/1")) throw createErr;
       try {
         await client.objectStructure(url);
-        return ok(`✅ Class '${n}' created as behaviorPool (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})\nURI: ${url}\n\nNext steps:\n  read_abap_source → write_abap_source`);
+        return ok(`✅ Class '${n}' created as behaviorPool (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})${tr.note}\nURI: ${url}\n\nNext steps:\n  read_abap_source → write_abap_source`);
       } catch { throw createErr; }
     }
-    return ok(`✅ Class '${n}' created as behaviorPool\nURI: ${url}\n\nNext steps:\n  read_abap_source → write_abap_source`);
+    return ok(`✅ Class '${n}' created as behaviorPool${tr.note}\nURI: ${url}\n\nNext steps:\n  read_abap_source → write_abap_source`);
   }
 
   try {
-    await client.createObject("CLAS/OC", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, p.transport || undefined);
+    await client.createObject("CLAS/OC", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, tr.transport);
   } catch (createErr) {
     // ADT sometimes returns a non-2xx response even when the class was successfully created
     // (e.g. HTTP 500 with a redirect or warning body). Verify by checking if the object exists.
@@ -81,7 +100,7 @@ export async function handleCreateAbapClass(client: ADTClient, args: Record<stri
       await client.objectStructure(url);
       // Object exists → creation succeeded despite the error response (e.g. HTTP 500 + warning body)
       return ok(
-        `✅ Class '${n}' created (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})\n` +
+        `✅ Class '${n}' created (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})${tr.note}\n` +
         `URI: ${url}\n\nNext steps:\n  read_abap_source → write_abap_source`
       );
     } catch {
@@ -95,7 +114,7 @@ export async function handleCreateAbapClass(client: ADTClient, args: Record<stri
     ? `\n\n⚠️ Note: superClass='${p.superClass}' is NOT applied at creation (ADT limitation). ` +
       `Add 'INHERITING FROM ${p.superClass.toUpperCase()}' to the class definition via write_abap_source.`
     : "";
-  return ok(`✅ Class '${n}' created\nURI: ${url}${superClassNote}\n\nNext steps:\n  read_abap_source → write_abap_source`);
+  return ok(`✅ Class '${n}' created${tr.note}\nURI: ${url}${superClassNote}\n\nNext steps:\n  read_abap_source → write_abap_source`);
 }
 
 export async function handleCreateAbapInterface(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -104,9 +123,10 @@ export async function handleCreateAbapInterface(client: ADTClient, args: Record<
   assertPackageAllowed(p.devClass);
   assertCustomerNamespace(p.name, ["ZIF_", "YIF_"]);
   const n = p.name.toUpperCase();
-  await client.createObject("INTF/OI", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, p.transport || undefined);
   const url = `${ADT_INTERFACES}/${n.toLowerCase()}`;
-  return ok(`✅ Interface '${n}' created\nURI: ${url}`);
+  const tr = await transportFor(client, url, p.devClass, p.transport);
+  await client.createObject("INTF/OI", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, tr.transport);
+  return ok(`✅ Interface '${n}' created${tr.note}\nURI: ${url}`);
 }
 
 export async function handleCreateFunctionGroup(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -115,9 +135,10 @@ export async function handleCreateFunctionGroup(client: ADTClient, args: Record<
   assertPackageAllowed(p.devClass);
   assertCustomerNamespace(p.name, ["Z", "Y"]);
   const n = p.name.toUpperCase();
-  await client.createObject("FUGR/F", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, p.transport || undefined);
   const url = `${ADT_FUNCTION_GROUPS}/${n.toLowerCase()}`;
-  return ok(`✅ Function group '${n}' created\nURI: ${url}`);
+  const tr = await transportFor(client, url, p.devClass, p.transport);
+  await client.createObject("FUGR/F", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, tr.transport);
+  return ok(`✅ Function group '${n}' created${tr.note}\nURI: ${url}`);
 }
 
 export async function handleCreateCdsView(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -128,6 +149,7 @@ export async function handleCreateCdsView(client: ADTClient, args: Record<string
   const n = p.name.toUpperCase();
   const url = `${ADT_DDIC_DDL_SOURCES}/${n.toLowerCase()}`;
   const responsible = client.httpClient.username.toUpperCase();
+  const tr = await transportFor(client, url, p.devClass, p.transport);
 
   // Resolve initial source from inline string or file path.
   // On some S/4HANA on-premise systems the DDL sources endpoint requires the
@@ -169,7 +191,7 @@ export async function handleCreateCdsView(client: ADTClient, args: Record<string
   ].join("\n");
 
   const qs: Record<string, string> = {};
-  if (p.transport) qs.corrNr = p.transport;
+  if (tr.transport) qs.corrNr = tr.transport;
 
   try {
     await client.httpClient.request(ADT_DDIC_DDL_SOURCES, {
@@ -185,13 +207,13 @@ export async function handleCreateCdsView(client: ADTClient, args: Record<string
     }
     try {
       await client.objectStructure(url);
-      return ok(`✅ CDS View '${n}' created (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})\nURI: ${url}`);
+      return ok(`✅ CDS View '${n}' created (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})${tr.note}\nURI: ${url}`);
     } catch {
       throw createErr;
     }
   }
 
-  return ok(`✅ CDS View '${n}' created\nURI: ${url}\n\nNext step:\n  write_abap_source with objectUrl='${url}' to update the source`);
+  return ok(`✅ CDS View '${n}' created${tr.note}\nURI: ${url}\n\nNext step:\n  write_abap_source with objectUrl='${url}' to update the source`);
 }
 
 export async function handleCreateDatabaseTable(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -201,6 +223,7 @@ export async function handleCreateDatabaseTable(client: ADTClient, args: Record<
   assertCustomerNamespace(p.name, ["Z", "Y"]);
   const n = p.name.toUpperCase();
   const url = `${ADT_DDIC_TABLES}/${n.toLowerCase()}`;
+  const tr = await transportFor(client, url, p.devClass, p.transport);
 
   // abap-adt-api's createObject passes corrNr as a query param, but the ADT endpoint
   // for TABL/DT requires it to be present. Use a direct HTTP POST (same pattern as
@@ -219,7 +242,7 @@ export async function handleCreateDatabaseTable(client: ADTClient, args: Record<
   ].join("\n");
 
   const qs: Record<string, string> = {};
-  if (p.transport) qs.corrNr = p.transport;
+  if (tr.transport) qs.corrNr = tr.transport;
 
   try {
     await client.httpClient.request(ADT_DDIC_TABLES, {
@@ -237,13 +260,13 @@ export async function handleCreateDatabaseTable(client: ADTClient, args: Record<
     }
     try {
       await client.objectStructure(url);
-      return ok(`✅ Table '${n}' created (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})\nURI: ${url}`);
+      return ok(`✅ Table '${n}' created (ADT returned a non-fatal error: ${errMsg.substring(0, 120)})${tr.note}\nURI: ${url}`);
     } catch {
       throw createErr;
     }
   }
 
-  return ok(`✅ Table '${n}' created\nURI: ${url}`);
+  return ok(`✅ Table '${n}' created${tr.note}\nURI: ${url}`);
 }
 
 export async function handleCreateMessageClass(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -252,8 +275,10 @@ export async function handleCreateMessageClass(client: ADTClient, args: Record<s
   assertPackageAllowed(p.devClass);
   assertCustomerNamespace(p.name, ["Z", "Y"]);
   const n = p.name.toUpperCase();
-  await client.createObject("MSAG/N", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, p.transport || undefined);
-  return ok(`✅ Message class '${n}' created`);
+  const url = `/sap/bc/adt/messageclass/${n.toLowerCase()}`;
+  const tr = await transportFor(client, url, p.devClass, p.transport);
+  await client.createObject("MSAG/N", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, tr.transport);
+  return ok(`✅ Message class '${n}' created${tr.note}`);
 }
 
 export async function handleCreateCdsMetadataExtension(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -262,9 +287,10 @@ export async function handleCreateCdsMetadataExtension(client: ADTClient, args: 
   assertPackageAllowed(p.devClass);
   assertCustomerNamespace(p.name, ["Z", "Y"]);
   const n = p.name.toUpperCase();
-  await client.createObject("DDLX/EX", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, p.transport || undefined);
   const url = `${ADT_DDIC_DDLX_SOURCES}/${n.toLowerCase()}`;
-  return ok(`✅ CDS Metadata Extension '${n}' created\nURI: ${url}\n\nNext step:\n  write_abap_source with objectUrl='${url}'`);
+  const tr = await transportFor(client, url, p.devClass, p.transport);
+  await client.createObject("DDLX/EX", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, tr.transport);
+  return ok(`✅ CDS Metadata Extension '${n}' created${tr.note}\nURI: ${url}\n\nNext step:\n  write_abap_source with objectUrl='${url}'`);
 }
 
 export async function handleCreateServiceDefinition(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -273,9 +299,10 @@ export async function handleCreateServiceDefinition(client: ADTClient, args: Rec
   assertPackageAllowed(p.devClass);
   assertCustomerNamespace(p.name, ["Z", "Y"]);
   const n = p.name.toUpperCase();
-  await client.createObject("SRVD/SRV", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, p.transport || undefined);
   const url = `${ADT_DDIC_SRVD_SOURCES}/${n.toLowerCase()}`;
-  return ok(`✅ Service Definition '${n}' created\nURI: ${url}\n\nNext steps:\n  1. write_abap_source with objectUrl='${url}'\n  2. create_service_binding to expose it as OData`);
+  const tr = await transportFor(client, url, p.devClass, p.transport);
+  await client.createObject("SRVD/SRV", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, tr.transport);
+  return ok(`✅ Service Definition '${n}' created${tr.note}\nURI: ${url}\n\nNext steps:\n  1. write_abap_source with objectUrl='${url}'\n  2. create_service_binding to expose it as OData`);
 }
 
 export async function handleCreateServiceBinding(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -286,6 +313,8 @@ export async function handleCreateServiceBinding(client: ADTClient, args: Record
   const n = p.name.toUpperCase();
   const responsible = client.httpClient.username.toUpperCase();
   const svc = p.serviceDefinition.toUpperCase();
+  const url = `${ADT_BUSINESSSERVICES_BINDINGS}/${n.toLowerCase()}`;
+  const tr = await transportFor(client, url, p.devClass, p.transport);
 
   // The binding type is encoded by TWO orthogonal attributes on <srvb:binding>:
   //   srvb:version  = "V2" | "V4"  (OData protocol version)
@@ -320,7 +349,7 @@ export async function handleCreateServiceBinding(client: ADTClient, args: Record
   ].join("\n");
 
   const qs: Record<string, string> = {};
-  if (p.transport) qs.corrNr = p.transport;
+  if (tr.transport) qs.corrNr = tr.transport;
 
   await client.httpClient.request(ADT_BUSINESSSERVICES_BINDINGS, {
     method: "POST",
@@ -329,8 +358,7 @@ export async function handleCreateServiceBinding(client: ADTClient, args: Record
     body,
   });
 
-  const url = `${ADT_BUSINESSSERVICES_BINDINGS}/${n.toLowerCase()}`;
-  return ok(`✅ Service Binding '${n}' created (${p.bindingType} → OData ${odataVersion}, category ${category})\nService Definition: ${svc}\nURI: ${url}\n\nNext step:\n  publish_service_binding with name='${n}'`);
+  return ok(`✅ Service Binding '${n}' created (${p.bindingType} → OData ${odataVersion}, category ${category})${tr.note}\nService Definition: ${svc}\nURI: ${url}\n\nNext step:\n  publish_service_binding with name='${n}'`);
 }
 
 export async function handlePublishServiceBinding(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -387,9 +415,10 @@ export async function handleCreateDataControlLanguage(client: ADTClient, args: R
   assertPackageAllowed(p.devClass);
   assertCustomerNamespace(p.name, ["Z", "Y"]);
   const n = p.name.toUpperCase();
-  await client.createObject("DCLS/DL", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, p.transport || undefined);
   const url = `${ADT_ACM_DCL_SOURCES}/${n.toLowerCase()}`;
-  return ok(`✅ Data Control Language source '${n}' created\nURI: ${url}\n\nNext step:\n  write_abap_source with objectUrl='${url}'`);
+  const tr = await transportFor(client, url, p.devClass, p.transport);
+  await client.createObject("DCLS/DL", n, p.devClass, p.description, `${ADT_PACKAGES}/${encodeURIComponent(p.devClass)}`, undefined, tr.transport);
+  return ok(`✅ Data Control Language source '${n}' created${tr.note}\nURI: ${url}\n\nNext step:\n  write_abap_source with objectUrl='${url}'`);
 }
 
 export async function handleCreateBehaviorDefinition(client: ADTClient, args: Record<string, unknown>): Promise<ToolResult> {
@@ -399,6 +428,8 @@ export async function handleCreateBehaviorDefinition(client: ADTClient, args: Re
   assertCustomerNamespace(p.name, ["Z", "Y"]);
   const n = p.name.toUpperCase();
   const responsible = client.httpClient.username.toUpperCase();
+  const url = `${ADT_BO_BEHAVIORS}/${n.toLowerCase()}`;
+  const tr = await transportFor(client, url, p.devClass, p.transport);
 
   // abap-adt-api has no BDEF support — direct HTTP POST to /sap/bc/adt/bo/behaviordefinitions
   // The endpoint expects the standard blue:blueSource format (same as TABL/DDLS), type BDEF/BDO
@@ -415,7 +446,7 @@ export async function handleCreateBehaviorDefinition(client: ADTClient, args: Re
   ].join("\n");
 
   const qs: Record<string, string> = {};
-  if (p.transport) qs.corrNr = p.transport;
+  if (tr.transport) qs.corrNr = tr.transport;
 
   await client.httpClient.request(ADT_BO_BEHAVIORS, {
     method: "POST",
@@ -424,9 +455,8 @@ export async function handleCreateBehaviorDefinition(client: ADTClient, args: Re
     body,
   });
 
-  const url = `${ADT_BO_BEHAVIORS}/${n.toLowerCase()}`;
   return ok(
-    `✅ Behavior Definition '${n}' created\nURI: ${url}\n\n` +
+    `✅ Behavior Definition '${n}' created${tr.note}\nURI: ${url}\n\n` +
     `Next steps:\n` +
     `  1. write_abap_source with objectUrl='${url}'\n` +
     `     First line must be: managed; | unmanaged; | projection; | abstract; | interface;\n` +

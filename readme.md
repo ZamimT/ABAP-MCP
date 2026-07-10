@@ -234,6 +234,7 @@ In VS Code öffne die Cline Settings (Cline-Symbol → Settings) und gehe zu "MC
         "ALLOW_EXECUTE": "true",
         "BLOCKED_PACKAGES": "SAP,SHD,SMOD",
         "DEFAULT_TRANSPORT": "",
+        "REUSE_OPEN_TRANSPORT": "true",
         "SYNTAX_CHECK_BEFORE_ACTIVATE": "true",
         "SAP_ALLOW_UNAUTHORIZED": "true",
         "MAX_DUMPS": "20",
@@ -289,6 +290,8 @@ SYNTAX_CHECK_BEFORE_ACTIVATE=true
 DEFER_TOOLS=true
 SAP_ABAP_VERSION=latest
 DEFAULT_TRANSPORT=
+# Offenen Request wiederverwenden statt pro Objekt einen neuen anzulegen (Default true).
+REUSE_OPEN_TRANSPORT=true
 MAX_DUMPS=20
 # Source-Cache-TTL in ms für getObjectSource (Default 30000; 0 = aus).
 # Writes/Deletes invalidieren automatisch.

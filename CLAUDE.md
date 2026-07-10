@@ -52,7 +52,7 @@ npm run clean
   - `tool-registry.ts` — categories, core tools, deferred loading
   - `handler-map.ts` — dispatch map (tool name → handler function)
   - `handlers/` — 20 handler modules (search, read, write, create, delete, test, quality, diagnostics, transport, abapgit, query, documentation, context, websearch, batch, meta, method, contract, analysis, intent)
-- **Helpers**: `src/helpers/` — JSON schema conversion, DDIC validation, documentation fetching, Clean ABAP analysis, method-splice (single-method surgery), contract (context compression)
+- **Helpers**: `src/helpers/` — JSON schema conversion, DDIC validation, documentation fetching, Clean ABAP analysis, method-splice (single-method surgery), contract (context compression), transport-resolve (reuse an open request instead of auto-creating new ones)
 - **Cache**: `src/cache.ts` — TTL-bounded `getObjectSource` cache, invalidated on write/delete
 - **Audit**: `src/audit.ts` — structured JSON audit log of write/delete/execute (to stderr + optional file). write/edit/delete handlers audit internally; all other mutating tools (creates, activates, abapGit pull, transport, snippet outcome) are covered by the `withAudit` wrapper in `handler-map.ts`, driven by `AUDIT_WRAPPED_TOOLS` in `tools/mutating-tools.ts` — add new mutating tools there (the derived `MUTATING_TOOL_NAMES` set also feeds the `batch_read` blocklist; a drift-guard test enforces coverage). Guard rejections log `outcome=denied`.
 - **Connection**: Per-session `ADTClient` pool (`src/adt-client.ts`). `getClient()` returns an implicit single "default" session auto-registered from the `SAP_*` env vars — stdio/local behaviour is unchanged. Multi-user / HTTP callers use `registerSession(key, creds)` + `getClientFor(key)` so each user gets an isolated ADT login (own locks, own SAP audit identity). The network transport (proxy agent + connectivity JWT) is built once via `getSharedAgent()` and shared across all sessions; pool lifecycle helpers: `dropClientSession`, `evictIdleSessions`, `hasSession`, `sessionCount`.
@@ -94,7 +94,8 @@ lock(objectUrl)
 **Optional:**
 - `SAP_CLIENT=100` (default) — SAP client number
 - `SAP_LANGUAGE=EN` (default) — Logon language
-- `DEFAULT_TRANSPORT` — Default transport request for write operations
+- `DEFAULT_TRANSPORT` — Default transport request for write operations. When set it takes precedence over the reuse heuristic below, making every write/create deterministic.
+- `REUSE_OPEN_TRANSPORT=true` (default) — When no transport is passed and `DEFAULT_TRANSPORT` is empty, reuse an already-open request for the object/package instead of letting ADT auto-create a new "Generated Request for Change Recording" per object. Prevents transport fragmentation during a create/write burst (see `src/helpers/transport-resolve.ts`). Set `false` for the legacy behaviour.
 - `SYNTAX_CHECK_BEFORE_ACTIVATE=true` (default) — Set `false` to skip syntax check before activation
 - `MAX_DUMPS=20` (default) — Max short dumps returned by diagnostics
 - `SAP_ALLOW_UNAUTHORIZED=false` (default) — Accept self-signed SSL certificates (scoped to the ADT connection only)
