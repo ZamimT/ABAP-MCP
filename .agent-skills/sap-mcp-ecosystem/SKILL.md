@@ -60,6 +60,7 @@ Use this skill when:
 | Enterprise ADT options | `marianfoo/vibing-steampunk`, `marianfoo/openadt` | ADT governance, HTTP transport, package/transport controls, SNC/SSO/JCo options |
 | Clean Core / released objects | `ClementRingot/ROSA` | Released API/object guidance |
 | ABAP translations | `marianfoo/LISA`, `ClementRingot/LISA` | Translation/i18n workflows |
+| ABAP Knowledge Base | `Gixsy95/abap_wiki` | Citation-first Markdown/Obsidian knowledge base and Live→Wiki workflow |
 | Offline ABAP analysis | `palimkarakshay/abap-mcp` | abaplint, ABAP Cloud readiness |
 | OData/S/4 services | `marianfoo/odata-mcp-proxy`, `lemaiwo/btp-sap-odata-to-mcp-server`, `Nidhideep/sap-s4-mcp-server` | OData discovery/metadata/query ideas |
 | HANA | `HatriGt/hana-mcp-server` | Direct HANA schema/query MCP |

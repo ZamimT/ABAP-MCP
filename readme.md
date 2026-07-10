@@ -148,6 +148,7 @@ Diese Repos sind nützlich, bleiben aber standardmäßig außerhalb des ABAP-MCP
 | CPI / Integration Suite | `marianfoo/odata-mcp-proxy`, `btp-is-ci-mcp-server` | Integration Runtime und Deployment-Risiko |
 | SuccessFactors | `aiadiguru2025/sf-mcp` | HR/PII-Daten, eigene Security Boundary |
 | ABAP i18n | `marianfoo/LISA` | Übersetzungsservice + ABAP HTTP Service/XCO i18n APIs |
+| ABAP Knowledge Base / Agentic Memory | `Gixsy95/abap_wiki` | citation-first Markdown/Obsidian knowledge base; use as sister project for Live→Wiki documentation |
 
 ### Spätere read-only Tool-Implementierungen
 
@@ -157,8 +158,9 @@ Neue Fähigkeiten sollen zuerst **read-only** oder **offline** entstehen. Die Ro
 2. Offline ABAP Checks: `abap_lint_source`, `scan_abapgit_export`, `check_abap_cloud_readiness_offline`
 3. Clean Core Checks: `check_released_object`, `find_clean_core_alternative`, `explain_clean_core_violation`
 4. OData read-only Verification: `odata_discover_services`, `odata_get_metadata`, `odata_list_entity_sets`, `odata_query_entity_readonly`, `odata_get_value_help`
+5. Knowledge Base / Agentic Memory: `wiki_export_object_context`, `wiki_export_change_evidence`, `wiki_check_freshness`, `wiki_query_context` — with `Gixsy95/abap_wiki` as sister project
 
-Für Details und Guardrails siehe [`docs/read-only-tool-roadmap.md`](./docs/read-only-tool-roadmap.md).
+Für Details und Guardrails siehe [`docs/read-only-tool-roadmap.md`](./docs/read-only-tool-roadmap.md) und [`docs/live-to-wiki-workflow.md`](./docs/live-to-wiki-workflow.md).
 
 ---
 

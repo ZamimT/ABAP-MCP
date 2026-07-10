@@ -27,6 +27,7 @@ When working in this repository, read the relevant Markdown skill files before c
 | SAP API policy/evidence, API Hub, Notes, Road Map | `.agent-skills/sap-api-evidence-policy/SKILL.md` |
 | Enterprise ADT alternatives, SSO/SNC/JCo, transport/package governance | `.agent-skills/abap-adt-enterprise-options/SKILL.md` |
 | ABAP translations/i18n/text pools/message texts | `.agent-skills/abap-i18n-translation/SKILL.md` |
+| Persistent ABAP knowledge base / live-to-wiki documentation | `.agent-skills/abap-knowledge-base/SKILL.md` |
 
 Claude Code can also load mirrored native skills from `.claude/skills/*/SKILL.md`. The `.agent-skills` copies are the source of truth for all agents.
 
