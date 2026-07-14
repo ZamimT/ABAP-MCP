@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "abap-mcp-marketplace",
+  "owner": {
+    "name": "Zamim Tufan"
+  },
+  "plugins": [
+    {
+      "name": "abap-mcp",
+      "source": "./",
+      "description": "Agentic SAP ABAP development via ADT REST API — 67 MCP tools for search/read/write, CDS/RAP/OData, Clean ABAP review, DDIC pre-write validation, transports, abapGit, BTP/SAProuter connectivity, and impact analysis."
+    }
+  ]
+}
