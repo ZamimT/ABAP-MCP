@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "abap-mcp",
+  "displayName": "ABAP MCP",
+  "description": "Agentic SAP ABAP development via ADT REST API — 67 MCP tools for search/read/write, CDS/RAP/OData, Clean ABAP review, DDIC pre-write validation, transports, abapGit, BTP/SAProuter connectivity, and impact analysis.",
+  "version": "2.0.0",
+  "author": {
+    "name": "Zamim Tufan",
+    "url": "https://github.com/ZamimT"
+  },
+  "homepage": "https://github.com/ZamimT/ABAP-MCP#readme",
+  "repository": "https://github.com/ZamimT/ABAP-MCP",
+  "keywords": [
+    "sap",
+    "abap",
+    "adt",
+    "s4hana",
+    "cds",
+    "rap",
+    "clean-abap",
+    "mcp"
+  ],
+  "defaultEnabled": false,
+  "userConfig": {
+    "sap_url": {
+      "type": "string",
+      "title": "SAP System URL",
+      "description": "Base URL of your SAP system's ADT endpoint, e.g. https://mysystem.example.com:44300",
+      "required": true
+    },
+    "sap_user": {
+      "type": "string",
+      "title": "SAP User",
+      "description": "SAP username used for the ADT connection",
+      "required": true
+    },
+    "sap_password": {
+      "type": "string",
+      "title": "SAP Password",
+      "description": "SAP password used for the ADT connection. Stored securely (OS keychain), never written to settings.json.",
+      "required": true,
+      "sensitive": true
+    },
+    "sap_client": {
+      "type": "string",
+      "title": "SAP Client",
+      "description": "SAP client number, e.g. 100",
+      "default": "100"
+    },
+    "sap_language": {
+      "type": "string",
+      "title": "SAP Logon Language",
+      "description": "Logon language code, e.g. EN or DE",
+      "default": "EN"
+    },
+    "allow_write": {
+      "type": "boolean",
+      "title": "Allow write operations",
+      "description": "Enables write_abap_source and other mutating tools. Leave disabled for safe read-only use on any system.",
+      "default": false
+    },
+    "allow_delete": {
+      "type": "boolean",
+      "title": "Allow delete operations",
+      "description": "Enables delete_abap_object. Only takes effect when write is also allowed.",
+      "default": false
+    },
+    "allow_execute": {
+      "type": "boolean",
+      "title": "Allow ad-hoc snippet execution",
+      "description": "Enables execute_abap_snippet (ephemeral $TMP execution, auto-cleanup). Only takes effect when write is also allowed.",
+      "default": false
+    }
+  },
+  "mcpServers": {
+    "abap-mcp-server": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.js"],
+      "env": {
+        "SAP_URL": "${user_config.sap_url}",
+        "SAP_USER": "${user_config.sap_user}",
+        "SAP_PASSWORD": "${user_config.sap_password}",
+        "SAP_CLIENT": "${user_config.sap_client}",
+        "SAP_LANGUAGE": "${user_config.sap_language}",
+        "ALLOW_WRITE": "${user_config.allow_write}",
+        "ALLOW_DELETE": "${user_config.allow_delete}",
+        "ALLOW_EXECUTE": "${user_config.allow_execute}"
+      }
+    }
+  }
+}

@@ -60,6 +60,10 @@ SAPRead({ operation: "method", args: { objectUrl: "...", methodName: "calculate"
 
 ## Quickstart
 
+**Schnellster Weg (Claude Code):** `/plugin marketplace add ZamimT/ABAP-MCP` dann `/plugin install abap-mcp@abap-mcp-marketplace` — siehe [Claude Code Plugin](#claude-code-plugin) unten. Kein manuelles Clone/Build nötig, der Server baut sich beim ersten Session-Start selbst.
+
+**Manuell (jeder MCP-Client):**
+
 **1. Abhängigkeiten installieren & bauen**
 ```bash
 npm install
@@ -140,7 +144,7 @@ Diese Repos sind nützlich, bleiben aber standardmäßig außerhalb des ABAP-MCP
 | SAP Docs / ABAP Docs | `marianfoo/mcp-sap-docs`, `marianfoo/abap-mcp-server`, `marianfoo/abap-docs` | Doku-/Index-Backend, keine ADT-Mutation |
 | API Hub / Notes / Road Map | `marianfoo/sap-mcp-servers`, `marianfoo/sap-api-policy-skill` | SAP-login/evidence boundary |
 | Enterprise ADT | `marianfoo/vibing-steampunk`, `marianfoo/openadt` | andere Runtime/Auth-Stacks, SSO/SNC/JCo |
-| HANA | `HatriGt/hana-mcp-server` | direkter DB-Zugriff, eigene Credentials, Datenrisiko |
+| HANA | `HatriGt/hana-mcp-server`, [SAP-samples/hana-cli-claude-plugin](https://github.com/SAP-samples/hana-cli-claude-plugin) (166 Tools, offizielles SAP-Sample, nativ als Claude-Code-Plugin installierbar über den Unterbau [hana-developer-cli-tool-example](https://github.com/SAP-samples/hana-developer-cli-tool-example)) | direkter DB-Zugriff, eigene Credentials, Datenrisiko |
 | Datasphere | `MarioDeFelipe/sap-datasphere-mcp` | eigene Plattform/API/Auth |
 | CAP | `gavdilabs/cap-mcp-plugin`, `marianfoo/cap-mcp-plugin` | CAP App Runtime statt ABAP ADT |
 | BTP/CF Ops | `marianfoo/btp-cf-mcp` | Account-/Cloud-Foundry-Administration |
@@ -225,6 +229,17 @@ die Tabelle oben basiert auf den öffentlichen Ankündigungen, nicht auf einer 1
 ## MCP-Client Konfiguration
 
 **Wichtig:** Den Server rufst du normalerweise **nicht manuell** auf — er wird vom MCP-Client (Claude Desktop, Claude Code usw.) automatisch gestartet. Du trägst ihn einmalig in die Config ein:
+
+### Claude Code Plugin
+
+Dieses Repository ist ein installierbares Claude-Code-Plugin (`.claude-plugin/plugin.json` + `.claude-plugin/marketplace.json`). Es gibt keinen `/plugin install <url>`-Einzelschritt in Claude Code — jedes Plugin kommt über eine Marketplace-Registrierung. Da dieses Repo sich selbst als Marketplace mit einem Eintrag katalogisiert, sind es zwei Befehle:
+
+```
+/plugin marketplace add ZamimT/ABAP-MCP
+/plugin install abap-mcp@abap-mcp-marketplace
+```
+
+Beim Enable fragt Claude Code interaktiv nach `sap_url`, `sap_user`, `sap_password` (sicher im OS-Keychain gespeichert, nie in `settings.json`), `sap_client`, `sap_language` sowie den drei `allow_*`-Schaltern (alle standardmäßig `false` — sicherer Read-only-Default). Ein `SessionStart`-Hook baut den Server beim ersten Start automatisch (`npm install && npm run build` in `${CLAUDE_PLUGIN_DATA}`) und rebuilt nur, wenn sich `package.json` ändert — spätere Sessions starten ohne Build-Overhead.
 
 ### Claude Desktop
 
